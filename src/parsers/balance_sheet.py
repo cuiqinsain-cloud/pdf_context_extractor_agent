@@ -287,7 +287,24 @@ class BalanceSheetParser:
                 # 查找包含数字的列（可能是金额列）
                 numeric_cols = []
                 for col_idx, cell in enumerate(row):
-                    if cell and re.search(r'\d{1,3}(,\d{3})*(\.\d+)?', str(cell)):
+                    # 跳过已识别的附注列
+                    if header_info['note_col'] is not None and col_idx == header_info['note_col']:
+                        continue
+
+                    cell_str = str(cell).strip() if cell else ""
+                    if not cell_str:
+                        continue
+
+                    # 排除附注格式（如"七、1"、"七、2"等）
+                    if re.search(r'[一二三四五六七八九十]+、\d+', cell_str):
+                        continue
+
+                    # 只匹配真正的金额格式（纯数字或带千分位的数字）
+                    # 要求：数字必须是整个单元格的主要内容，不能只是其中一部分
+                    # 支持两种格式：
+                    # 1. 带千分位：1,234,567.89
+                    # 2. 不带千分位：1234567.89
+                    if re.match(r'^\s*-?(\d{1,3}(,\d{3})*|\d+)(\.\d+)?\s*$', cell_str):
                         numeric_cols.append(col_idx)
 
                 # 如果找到了数字列，使用它们来修正列位置
