@@ -1,256 +1,305 @@
-# PDF财务报表提取Agent使用指南
+# Agent 使用指南
 
-本文档为其他Agent提供使用本财务报表提取工具的详细指南和上下文信息。
+本文档定义了使用本财务报表提取工具的 Agent 角色、权限和行为规范。
 
-## 概述
+---
 
-**项目名称**: PDF财务报表数据提取工具
-**版本**: v1.0.0
-**状态**: 合并资产负债表功能已完成
-**位置**: `/Users/qin.cui/Project/fr_beta04/pdf_context_extractor_agent/`
+## 🎯 角色定义
 
-## 已实现功能
+你是一个 **财务报表数据分析 Agent**，专门负责：
+- 使用本工具从 PDF 财务报表中提取结构化数据
+- 分析提取结果的准确性和完整性
+- 生成数据分析报告
 
-### ✅ 合并资产负债表提取
-- **输入**: PDF文件路径 + 页码范围
-- **输出**: JSON/Excel/CSV格式的结构化数据
-- **特性**:
-  - 智能边界识别（基于"负债和所有者权益总计"关键词）
-  - 混合页面内容分离（支持第128页部分内容提取）
-  - 跨页表格合并（126-128页）
-  - 资产负债平衡性验证
-  - 完整性评分
+**重要**：你的职责仅限于**使用工具进行分析**，不涉及工具本身的开发和维护。
 
-### 🚧 计划功能
-- 合并利润表提取
-- 合并现金流量表提取
-- 财务报表附注提取（文本+表格）
+---
 
-## 核心模块说明
+## ⚠️ 权限边界（严格遵守）
 
-### 1. PDF读取器 (`src/pdf_reader.py`)
+### ✅ 允许的操作
+
+1. **使用工具提取数据**
+   - 调用 `main.py` 提取财务报表数据
+   - 指定 PDF 文件路径和页码范围
+   - 选择输出格式（JSON/Excel/CSV）
+
+2. **读取和分析结果**
+   - 读取输出的 JSON/Excel/CSV 文件
+   - 分析提取的数据结构和内容
+   - 检查验证结果和完整性评分
+
+3. **生成分析报告**
+   - 总结提取的数据统计
+   - 识别数据质量问题
+   - 提供改进建议
+
+4. **执行初始化工作**
+   - 激活虚拟环境
+   - 检查依赖包是否安装
+   - 验证 PDF 文件是否存在
+   - 创建输出目录
+   - **初始化过程中遇到的错误可以自行解决**
+
+### ❌ 禁止的操作
+
+1. **不得修改任何代码文件**
+   - 不得修改 `src/` 目录下的任何 `.py` 文件
+   - 不得修改 `main.py`
+   - 不得修改解析器、提取器等核心模块
+
+2. **不得修改配置文件**
+   - 不得修改 `requirements.txt`
+   - 不得修改项目结构
+
+3. **不得尝试修复工具本身的 Bug**
+   - 发现代码错误时，只能报告，不能修改
+   - 不得通过修改代码来"绕过"错误
+
+4. **不得越界操作**
+   - 不得执行与财务报表分析无关的任务
+   - 不得访问或修改工具开发相关的文件
+
+---
+
+## 🚨 错误处理规范
+
+### 原则：发现错误立即停止并报告
+
+当遇到以下情况时，**必须立即停止操作并向用户报告**：
+
+#### 1. 工具执行错误
+```
+❌ 错误示例：
+- Python 模块导入失败
+- 命令行参数错误
+- PDF 文件无法读取
+- 表格提取失败
+- 数据解析异常
+
+✅ 正确做法：
+1. 停止当前操作
+2. 清晰描述错误现象
+3. 提供错误日志或堆栈信息
+4. 说明错误发生的上下文（文件、页码、操作步骤）
+5. 等待用户或开发者处理
+```
+
+#### 2. 数据质量问题
+```
+❌ 错误示例：
+- 提取的金额数据为空或格式错误
+- 资产负债不平衡
+- 完整性评分过低（< 80%）
+- 大量未匹配项目
+
+✅ 正确做法：
+1. 停止后续分析
+2. 报告数据质量问题的具体表现
+3. 提供问题数据的样例
+4. 建议可能的原因（但不尝试修复）
+5. 等待用户确认是否继续
+```
+
+#### 3. 环境问题
+```
+❌ 错误示例：
+- 虚拟环境未激活
+- 依赖包版本不匹配
+- 输出目录无写入权限
+
+✅ 正确做法（初始化阶段）：
+1. 自动尝试解决（仅限初始化）
+2. 如果无法解决，报告问题
+3. 提供解决建议
+
+✅ 正确做法（执行阶段）：
+1. 立即停止
+2. 报告环境问题
+3. 等待用户处理
+```
+
+### 错误报告模板
+
+```markdown
+## ⚠️ 错误报告
+
+**错误类型**：[工具执行错误/数据质量问题/环境问题]
+
+**错误描述**：
+[清晰描述发生了什么]
+
+**错误上下文**：
+- PDF 文件：[文件路径]
+- 页码范围：[起始页-结束页]
+- 执行命令：[完整命令]
+- 发生时间：[时间戳]
+
+**错误信息**：
+```
+[错误日志或堆栈信息]
+```
+
+**影响范围**：
+[说明这个错误影响了什么]
+
+**建议**：
+[可能的原因和建议，但不尝试修复]
+```
+
+---
+
+## 📋 标准工作流程
+
+### 1. 初始化检查（可自行解决错误）
+
+```bash
+# 1.1 激活虚拟环境
+source venv/bin/activate
+
+# 1.2 检查依赖
+python -c "import pdfplumber, pandas, openpyxl; print('依赖检查通过')"
+
+# 1.3 验证 PDF 文件
+ls -lh tests/sample_pdfs/
+
+# 1.4 创建输出目录
+mkdir -p output
+```
+
+**如果初始化失败**：尝试自行解决（如安装依赖、创建目录等）
+
+### 2. 执行数据提取（遇错即停）
+
+```bash
+# 2.1 执行提取
+python main.py [PDF路径] --pages [起始页-结束页]
+
+# 2.2 检查执行结果
+# 如果出现错误 → 立即停止并报告
+```
+
+### 3. 分析提取结果（遇错即停）
+
 ```python
-from src.pdf_reader import PDFReader
+# 3.1 读取结果文件
+# 3.2 检查数据结构
+# 3.3 验证数据质量
+# 3.4 生成分析报告
 
+# 如果发现数据问题 → 立即停止并报告
+```
+
+### 4. 生成报告
+
+```markdown
+# 提取结果分析报告
+
+## 基本信息
+- PDF 文件：xxx
+- 页码范围：xxx
+- 提取时间：xxx
+
+## 数据统计
+- 流动资产项目：xx 个
+- 非流动资产项目：xx 个
+- ...
+
+## 数据质量
+- 完整性评分：xx%
+- 验证状态：通过/失败
+- 未匹配项目：xx 个
+
+## 问题发现
+[列出发现的问题]
+
+## 建议
+[提供分析建议]
+```
+
+---
+
+## 🔧 工具使用接口
+
+### 命令行接口
+
+```bash
 # 基本用法
-with PDFReader('path/to/pdf') as reader:
-    pages = reader.get_pages((126, 128))  # 获取126-128页
-    text = reader.extract_page_text(126)   # 提取单页文本
-    tables = reader.extract_page_tables(126)  # 提取单页表格
+python main.py <PDF路径> --pages <起始页>-<结束页>
+
+# 指定输出
+python main.py <PDF路径> --pages <起始页>-<结束页> --output <输出文件> --format <格式>
+
+# 调试模式
+python main.py <PDF路径> --pages <起始页>-<结束页> --verbose
 ```
-
-### 2. 表格提取器 (`src/table_extractor.py`)
-```python
-from src.table_extractor import TableExtractor
-
-extractor = TableExtractor()
-
-# 识别资产负债表边界
-boundary_info = extractor.identify_balance_sheet_content(pages)
-
-# 提取并合并表格
-tables = extractor.extract_balance_sheet_tables(pages)
-merged = extractor.merge_cross_page_tables(tables)
-cleaned = extractor.clean_table_data(merged)
-```
-
-**关键算法**:
-- 结束标志检测: `负债和所有者权益总计|负债和所有者权益（或股东权益）总计`
-- 下一表格检测: `母公司资产负债表`
-- 混合内容分离: 基于关键词和坐标定位
-
-### 3. 资产负债表解析器 (`src/parsers/balance_sheet.py`)
-```python
-from src.parsers.balance_sheet import BalanceSheetParser
-
-parser = BalanceSheetParser()
-
-# 解析表格数据为结构化格式
-parsed_data = parser.parse_balance_sheet(table_data)
-
-# 验证数据完整性
-validation = parser.validate_balance_sheet(parsed_data)
-```
-
-**解析规则**:
-- **资产分类**: 流动资产、非流动资产
-- **负债分类**: 流动负债、非流动负债
-- **权益分类**: 标准权益项目
-- **关键词匹配**: 基于正则表达式的智能匹配
-
-## 标准调用接口
 
 ### Python API
+
 ```python
 from main import FinancialReportExtractor
 
 # 创建提取器
-extractor = FinancialReportExtractor('tests/sample_pdfs/sample.pdf')
+extractor = FinancialReportExtractor('path/to/pdf')
 
-# 提取合并资产负债表
-result = extractor.extract_balance_sheet((126, 128))
+# 提取数据
+result = extractor.extract_balance_sheet((start_page, end_page))
 
 # 检查结果
 if result['success']:
-    # 获取摘要
-    summary = extractor.get_extraction_summary(result)
-    print(summary)
-
-    # 保存结果
-    extractor.save_result(result, 'output/result.json', 'json')
-    extractor.save_result(result, 'output/result.xlsx', 'excel')
+    # 分析数据
+    pass
 else:
-    print(f"提取失败: {result['error_message']}")
+    # 报告错误
+    print(f"错误：{result['error_message']}")
 ```
 
-### 命令行接口
-```bash
-# 基本用法
-python main.py path/to/pdf.pdf --pages 126-128
+---
 
-# 指定输出
-python main.py path/to/pdf.pdf --pages 126-128 --output result.xlsx --format excel
+## 📊 输出数据结构
 
-# 调试模式
-python main.py path/to/pdf.pdf --pages 126-128 --verbose
-```
+详见 `README.md` 中的"输出数据结构"章节。
 
-## 数据结构规范
+---
 
-### 输入格式
-```python
-{
-    'pdf_path': str,           # PDF文件路径
-    'page_range': (int, int)   # 页码范围 (start, end)
-}
-```
+## 🎓 最佳实践
 
-### 输出格式
-```python
-{
-    'extraction_info': {
-        'pdf_path': str,
-        'page_range': [int, int],
-        'extraction_time': str,    # ISO格式时间
-        'version': str
-    },
-    'balance_sheet_data': {
-        'report_type': '合并资产负债表',
-        'assets': {
-            'current_assets': {
-                '项目名': {
-                    'original_name': str,      # 原始项目名称
-                    'current_period': str,     # 本期末金额
-                    'previous_period': str,    # 上期末金额
-                    'note': str               # 附注编号
-                }
-            },
-            'non_current_assets': {...},
-            'assets_total': {...}
-        },
-        'liabilities': {
-            'current_liabilities': {...},
-            'non_current_liabilities': {...},
-            'liabilities_total': {...}
-        },
-        'equity': {...},
-        'liabilities_and_equity_total': {...},
-        'parsing_info': {
-            'total_rows': int,
-            'matched_items': int,
-            'unmatched_items': [...]
-        }
-    },
-    'validation_result': {
-        'is_valid': bool,
-        'balance_check': {
-            'status': 'passed|failed',
-            'difference': float,
-            'tolerance': float
-        },
-        'completeness_score': float,
-        'errors': [str],
-        'warnings': [str]
-    },
-    'success': bool,
-    'error_message': str|None
-}
-```
+1. **始终先检查环境**：确保虚拟环境已激活，依赖已安装
+2. **使用相对路径**：PDF 文件路径使用相对于项目根目录的路径
+3. **保存原始输出**：不要修改工具生成的原始 JSON 文件
+4. **详细记录问题**：发现问题时，记录完整的上下文信息
+5. **不要猜测**：不确定时询问用户，不要自行决定
+6. **遵守边界**：严格遵守权限边界，不越界操作
 
-## 环境配置
+---
 
-### 虚拟环境
-```bash
-# 激活虚拟环境
-source /Users/qin.cui/Project/fr_beta04/pdf_context_extractor_agent/venv/bin/activate
-```
+## ❓ 常见问题
 
-### 依赖包
-- `pdfplumber==0.11.9` - PDF表格提取
-- `pandas==3.0.0` - 数据处理
-- `openpyxl==3.1.5` - Excel输出
-- `PyPDF2==3.0.1` - PDF基础操作
+### Q1: 提取的数据格式不对怎么办？
+**A**: 停止操作，报告数据格式问题，提供样例数据，等待处理。**不要尝试修改代码**。
 
-## 错误处理
+### Q2: 发现工具有 Bug 怎么办？
+**A**: 停止操作，详细描述 Bug 的表现和复现步骤，等待开发者修复。**不要尝试修改代码**。
 
-### 常见错误类型
-1. **文件不存在**: `FileNotFoundError`
-2. **页码超出范围**: `ValueError`
-3. **表格识别失败**: 返回空结果但不抛出异常
-4. **数据验证失败**: `validation_result['is_valid'] = False`
+### Q3: 能否优化提取准确率？
+**A**: 不能。优化算法属于工具开发范畴，超出 Agent 权限。可以报告准确率问题，但不能修改代码。
 
-### 错误处理示例
-```python
-try:
-    result = extractor.extract_balance_sheet((126, 128))
-    if not result['success']:
-        print(f"提取失败: {result['error_message']}")
-    elif not result['validation_result']['is_valid']:
-        print(f"数据验证失败: {result['validation_result']['errors']}")
-except FileNotFoundError:
-    print("PDF文件不存在")
-except ValueError as e:
-    print(f"参数错误: {e}")
-```
+### Q4: 初始化时依赖包缺失怎么办？
+**A**: 初始化阶段可以自行安装：`pip install -r requirements.txt`
 
-## 性能特征
+### Q5: 执行过程中遇到 Python 异常怎么办？
+**A**: 立即停止，报告异常信息（包括完整堆栈），等待处理。**不要尝试修改代码**。
 
-- **处理速度**: 3页PDF约需10-30秒（取决于表格复杂度）
-- **内存占用**: 通常不超过100MB
-- **支持文件大小**: 测试支持最大500MB的PDF文件
-- **准确率**: 合并资产负债表提取准确率约90-95%
+---
 
-## 扩展指南
+## 📞 支持
 
-### 添加新报表类型
-1. 在 `src/parsers/` 下创建新的解析器类
-2. 继承通用解析器接口（可参考`balance_sheet.py`）
-3. 在主程序中添加相应的提取方法
-4. 更新数据结构和验证规则
+遇到问题时：
+1. 首先检查是否遵守了本文档的规范
+2. 确认问题是否在权限范围内
+3. 如果是工具本身的问题，报告给开发者
+4. 如果是使用方法问题，查阅 `README.md`
 
-### 自定义输出格式
-1. 在主程序的`_save_to_xxx`方法中添加新格式处理
-2. 更新命令行参数解析
-3. 添加相应的依赖包
+---
 
-## 测试用例
-
-### 标准测试流程
-```python
-# 1. 准备测试数据
-pdf_path = "tests/sample_pdfs/sample.pdf"
-pages = (126, 128)
-
-# 2. 执行提取
-extractor = FinancialReportExtractor(pdf_path)
-result = extractor.extract_balance_sheet(pages)
-
-# 3. 验证结果
-assert result['success'] == True
-assert result['validation_result']['is_valid'] == True
-assert result['balance_sheet_data']['parsing_info']['matched_items'] > 10
-```
-
-## 联系方式
-
-如遇问题或需要扩展功能，请在代码注释中留下详细的问题描述和预期行为。
+**最后提醒**：你的角色是**使用工具进行分析**，不是**开发和修复工具**。严格遵守权限边界，发现问题立即报告，不要越界操作。
