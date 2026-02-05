@@ -1,0 +1,64 @@
+{
+  "llm_api": {
+    "// 说明": "LLM API 配置 - 必填参数",
+    "provider": "chaitin",
+    "base_url": "https://aiapi.chaitin.net",
+    "model": "glm-4.7",
+    "api_key_env": "LLM_API_KEY",
+
+    "// 说明2": "可选参数 - 可以保持默认值",
+    "max_tokens": 1024,
+    "temperature": 0.0,
+    "timeout": 30,
+    "max_retries": 3,
+
+    "// 说明3": "高级参数 - 通常不需要修改",
+    "default_headers": {},
+    "proxy": null,
+
+    "// 说明4": "常见 provider 配置示例",
+    "// Anthropic": "provider=anthropic, base_url=https://api.anthropic.com",
+    "// OpenRouter": "provider=openrouter, base_url=https://openrouter.ai/api/v1",
+    "// 自定义代理": "provider=custom, base_url=你的代理地址"
+  },
+
+  "llm_settings": {
+    "// 说明": "LLM功能开关",
+    "enable_llm": true,
+    "enable_comparison": true,
+    "enable_user_choice": true,
+
+    "// 说明2": "行为配置",
+    "confidence_threshold": 0.7,
+    "auto_accept_if_match": true,
+    "always_use_llm": false,
+    "fallback_to_rules": true,
+
+    "// 说明3": "对比策略",
+    "comparison_mode": "strict",
+    "allow_partial_match": false,
+
+    "// 说明4": "用户交互",
+    "choice_timeout": 60,
+    "default_choice": "rules",
+    "save_choices": true,
+    "choices_log_path": "logs/user_choices.json"
+  },
+
+  "performance": {
+    "// 说明": "性能优化配置",
+    "cache_llm_results": true,
+    "cache_ttl": 3600,
+    "batch_mode": false,
+    "parallel_requests": 1
+  },
+
+  "logging": {
+    "// 说明": "日志配置",
+    "log_llm_requests": true,
+    "log_llm_responses": true,
+    "log_comparisons": true,
+    "log_user_choices": true,
+    "log_file": "logs/llm_integration.log"
+  }
+}

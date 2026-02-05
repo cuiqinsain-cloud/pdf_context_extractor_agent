@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Any, Tuple
 import logging
 import pandas as pd
 from decimal import Decimal
+from .column_analyzer import ColumnAnalyzer, ColumnType
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,9 @@ class BalanceSheetParser:
 
     def __init__(self):
         """初始化解析器"""
+        # 初始化列结构分析器
+        self.column_analyzer = ColumnAnalyzer()
+
         # 资产项目关键词映射
         self.asset_patterns = {
             # 流动资产
@@ -238,6 +242,7 @@ class BalanceSheetParser:
     def _identify_header_structure(self, table_data: List[List[str]]) -> Dict[str, int]:
         """
         识别表头结构，确定各列的含义
+        使用 ColumnAnalyzer 进行动态列结构识别
 
         Args:
             table_data (List[List[str]]): 表格数据
@@ -252,98 +257,47 @@ class BalanceSheetParser:
             'note_col': None  # 附注列
         }
 
-        # 查找表头行
-        for row_idx, row in enumerate(table_data[:5]):  # 只检查前5行
-            if not row:
+        if not table_data:
+            return header_info
+
+        # 使用 ColumnAnalyzer 分析前几行，找到表头
+        for row_idx, row in enumerate(table_data[:10]):  # 检查前10行
+            if not row or len(row) < 2:
                 continue
 
-            row_text = ' '.join([cell.strip() if cell else '' for cell in row])
+            # 使用 ColumnAnalyzer 分析行结构
+            column_map = self.column_analyzer.analyze_row_structure(row)
 
-            # 寻找包含日期或"本期末"、"上期末"等关键词的行
-            if any(keyword in row_text for keyword in ['本期末', '期末余额', '本年末', '2024年', '2023年']):
-                for col_idx, cell in enumerate(row):
-                    cell_text = cell.strip() if cell else ""
-
-                    # 识别2024年（本期）列
-                    if re.search(r'2024年|本期末|本年末|期末余额', cell_text):
+            # 如果成功识别出至少2个列类型（通常是期末和期初），认为找到了表头
+            if len(column_map) >= 2:
+                # 转换为原有的 header_info 格式
+                for col_type, col_idx in column_map.items():
+                    if col_type == ColumnType.ITEM_NAME:
+                        header_info['item_name_col'] = col_idx
+                    elif col_type == ColumnType.CURRENT_PERIOD:
                         header_info['current_period_col'] = col_idx
-                    # 识别2023年（上期）列
-                    elif re.search(r'2023年|上期末|上年末|期初余额', cell_text):
+                    elif col_type == ColumnType.PREVIOUS_PERIOD:
                         header_info['previous_period_col'] = col_idx
-                    # 识别附注列
-                    elif re.search(r'附注|注释', cell_text):
+                    elif col_type == ColumnType.NOTE:
                         header_info['note_col'] = col_idx
 
+                logger.info(f"在第{row_idx}行识别到表头结构: {header_info}")
                 break
 
-        # 如果找到了表头，尝试通过实际数据行来修正列位置（处理合并单元格情况）
-        if header_info['current_period_col'] is not None:
-            # 查找第一个有数据的行来确定实际数据列
-            for row_idx in range(1, min(10, len(table_data))):
-                row = table_data[row_idx]
-                if not row or len(row) == 0:
-                    continue
-
-                # 查找包含数字的列（可能是金额列）
-                numeric_cols = []
-                for col_idx, cell in enumerate(row):
-                    # 跳过已识别的附注列
-                    if header_info['note_col'] is not None and col_idx == header_info['note_col']:
-                        continue
-
-                    cell_str = str(cell).strip() if cell else ""
-                    if not cell_str:
-                        continue
-
-                    # 排除附注格式（如"七、1"、"七、2"等）
-                    if re.search(r'[一二三四五六七八九十]+、\d+', cell_str):
-                        continue
-
-                    # 只匹配真正的金额格式（纯数字或带千分位的数字）
-                    # 要求：数字必须是整个单元格的主要内容，不能只是其中一部分
-                    # 支持两种格式：
-                    # 1. 带千分位：1,234,567.89
-                    # 2. 不带千分位：1234567.89
-                    if re.match(r'^\s*-?(\d{1,3}(,\d{3})*|\d+)(\.\d+)?\s*$', cell_str):
-                        numeric_cols.append(col_idx)
-
-                # 如果找到了数字列，使用它们来修正列位置
-                if len(numeric_cols) >= 2:
-                    # 假设第一个数字列是本期，第二个是上期
-                    # 但需要检查它们是否在表头列附近
-                    for col in numeric_cols:
-                        # 如果数字列在表头列左侧1-2列范围内，使用它
-                        if header_info['current_period_col'] - 2 <= col <= header_info['current_period_col']:
-                            header_info['current_period_col'] = col
-                            break
-
-                    for col in numeric_cols:
-                        if header_info['previous_period_col'] - 2 <= col <= header_info['previous_period_col']:
-                            header_info['previous_period_col'] = col
-                            break
-
-                    break
-
-        # 如果没有找到明确的列标识，使用智能推测
-        if header_info['current_period_col'] is None and len(table_data) > 0:
-            # 根据常见的资产负债表结构推测
-            if len(table_data[0]) == 4:  # 4列：项目、附注、本期、上期
-                header_info['note_col'] = 1
-                header_info['current_period_col'] = 2
-                header_info['previous_period_col'] = 3
-            elif len(table_data[0]) == 3:  # 3列：项目、本期、上期
-                header_info['current_period_col'] = 1
-                header_info['previous_period_col'] = 2
+        # 如果没有识别到列结构，记录警告
+        if header_info['current_period_col'] is None:
+            logger.warning("未能识别表头结构，将使用默认列索引")
 
         return header_info
 
     def _extract_values_from_row(self, row: List[str], header_info: Dict[str, int]) -> Dict[str, str]:
         """
         从行数据中提取数值
+        使用 ColumnAnalyzer 进行动态列结构识别，支持跨页列数变化
 
         Args:
             row (List[str]): 行数据
-            header_info (Dict[str, int]): 表头信息
+            header_info (Dict[str, int]): 表头信息（可能为空）
 
         Returns:
             Dict[str, str]: 提取的数值
@@ -357,53 +311,47 @@ class BalanceSheetParser:
             header_info.get('previous_period_col', 0) or 0
         ) + 1
 
-        # 如果列数不匹配，尝试智能识别（处理跨页表格列数变化的情况）
-        if row_col_count < expected_col_count:
-            # 列数较少，可能是4列格式：项目、附注、本期、上期
-            if row_col_count == 4:
-                # 4列格式：列0=项目名称，列1=附注，列2=本期末，列3=上期末
-                # 提取本期末（列2）
-                if row[2]:
-                    values['current_period'] = self._clean_numeric_value(row[2].strip())
+        # 如果列数不匹配或没有表头信息，使用 ColumnAnalyzer 动态分析
+        if (header_info['current_period_col'] is None or
+            row_col_count < expected_col_count or
+            abs(row_col_count - expected_col_count) > 1):
 
-                # 提取上期末（列3）
-                if row[3]:
-                    values['previous_period'] = self._clean_numeric_value(row[3].strip())
+            # 使用 ColumnAnalyzer 分析当前行的列结构
+            column_map = self.column_analyzer.analyze_row_structure(row)
 
-                # 提取附注（列1）
-                if row[1]:
-                    note_value = row[1].strip()
-                    # 只有当它看起来像附注时才保存（如"七、13"）
-                    if note_value and (re.search(r'[七八九十]、\d+', note_value) or re.search(r'^\d+$', note_value)):
-                        values['note'] = note_value
+            # 使用 ColumnAnalyzer 提取数值
+            extracted_values = self.column_analyzer.extract_values_from_row(row, column_map)
 
-                return values
+            # 转换为原有的格式
+            if 'current_period' in extracted_values:
+                values['current_period'] = extracted_values['current_period']
+            if 'previous_period' in extracted_values:
+                values['previous_period'] = extracted_values['previous_period']
+            if 'note' in extracted_values:
+                values['note'] = extracted_values['note']
 
-            elif row_col_count == 3:
-                # 3列格式：项目、本期、上期
-                if row_col_count > 1:
-                    values['current_period'] = self._clean_numeric_value(row[1].strip())
-                if row_col_count > 2:
-                    values['previous_period'] = self._clean_numeric_value(row[2].strip())
-                return values
+            return values
 
         # 使用标准的列索引提取（列数匹配的情况）
         # 提取本期末数据
         if (header_info['current_period_col'] is not None and
             header_info['current_period_col'] < len(row)):
-            current_value = row[header_info['current_period_col']].strip()
+            cell_value = row[header_info['current_period_col']]
+            current_value = cell_value.strip() if cell_value else ""
             values['current_period'] = self._clean_numeric_value(current_value)
 
         # 提取上期末数据
         if (header_info['previous_period_col'] is not None and
             header_info['previous_period_col'] < len(row)):
-            previous_value = row[header_info['previous_period_col']].strip()
+            cell_value = row[header_info['previous_period_col']]
+            previous_value = cell_value.strip() if cell_value else ""
             values['previous_period'] = self._clean_numeric_value(previous_value)
 
         # 提取附注信息
         if (header_info['note_col'] is not None and
             header_info['note_col'] < len(row)):
-            note_value = row[header_info['note_col']].strip()
+            cell_value = row[header_info['note_col']]
+            note_value = cell_value.strip() if cell_value else ""
             values['note'] = note_value if note_value else None
 
         return values
