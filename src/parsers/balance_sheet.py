@@ -333,19 +333,30 @@ class BalanceSheetParser:
             return values
 
         # 使用标准的列索引提取（列数匹配的情况）
-        # 提取本期末数据
-        if (header_info['current_period_col'] is not None and
-            header_info['current_period_col'] < len(row)):
-            cell_value = row[header_info['current_period_col']]
-            current_value = cell_value.strip() if cell_value else ""
-            values['current_period'] = self._clean_numeric_value(current_value)
+        # 但使用 ColumnAnalyzer 的智能提取方法，支持列偏移检测
+        from .column_analyzer import ColumnType
 
-        # 提取上期末数据
-        if (header_info['previous_period_col'] is not None and
-            header_info['previous_period_col'] < len(row)):
-            cell_value = row[header_info['previous_period_col']]
-            previous_value = cell_value.strip() if cell_value else ""
-            values['previous_period'] = self._clean_numeric_value(previous_value)
+        # 构建列映射
+        column_map = {}
+        if header_info.get('item_name_col') is not None:
+            column_map[ColumnType.ITEM_NAME] = header_info['item_name_col']
+        if header_info.get('current_period_col') is not None:
+            column_map[ColumnType.CURRENT_PERIOD] = header_info['current_period_col']
+        if header_info.get('previous_period_col') is not None:
+            column_map[ColumnType.PREVIOUS_PERIOD] = header_info['previous_period_col']
+        if header_info.get('note_col') is not None:
+            column_map[ColumnType.NOTE] = header_info['note_col']
+
+        # 使用 ColumnAnalyzer 的智能提取方法（支持列偏移检测）
+        extracted_values = self.column_analyzer.extract_values_from_row(row, column_map)
+
+        # 转换为原有的格式
+        if 'current_period' in extracted_values:
+            values['current_period'] = extracted_values['current_period']
+        if 'previous_period' in extracted_values:
+            values['previous_period'] = extracted_values['previous_period']
+        if 'note' in extracted_values:
+            values['note'] = extracted_values['note']
 
         # 提取附注信息
         if (header_info['note_col'] is not None and

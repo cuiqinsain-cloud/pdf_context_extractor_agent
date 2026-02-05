@@ -30,12 +30,12 @@ class ColumnAnalyzer:
                 r'项目', r'科目', r'会计科目', r'资产', r'负债', r'所有者权益'
             ],
             ColumnType.CURRENT_PERIOD: [
-                r'期末', r'本期末', r'本年末', r'本期', r'2024年.*期末',
-                r'2024年.*12月.*31日', r'当期', r'本年', r'年末余额', r'期末余额'
+                r'期末', r'本期末', r'本年末', r'本期', r'2024\s*年.*期末',
+                r'2024\s*年.*12\s*月.*31\s*日', r'当期', r'本年', r'年末余额', r'期末余额'
             ],
             ColumnType.PREVIOUS_PERIOD: [
-                r'期初', r'上期末', r'上年末', r'上期', r'2023年.*期末',
-                r'2023年.*12月.*31日', r'上年', r'年初余额', r'期初余额'
+                r'期初', r'上期末', r'上年末', r'上期', r'2023\s*年.*期末',
+                r'2023\s*年.*12\s*月.*31\s*日', r'上年', r'年初余额', r'期初余额'
             ],
             ColumnType.NOTE: [
                 r'附注', r'注释', r'注', r'备注'
@@ -309,6 +309,7 @@ class ColumnAnalyzer:
                                column_map: Dict[ColumnType, int]) -> Dict[str, Any]:
         """
         根据列映射从行中提取数值
+        支持智能列偏移检测，处理合并单元格导致的列偏移问题
 
         Args:
             row: 行数据
@@ -322,30 +323,87 @@ class ColumnAnalyzer:
         # 提取项目名称
         if ColumnType.ITEM_NAME in column_map:
             idx = column_map[ColumnType.ITEM_NAME]
-            if idx < len(row) and row[idx]:
-                values['item_name'] = str(row[idx]).strip()
+            value = self._extract_with_offset(row, idx, None)
+            if value:
+                values['item_name'] = str(value).strip()
 
         # 提取期末数据
         if ColumnType.CURRENT_PERIOD in column_map:
             idx = column_map[ColumnType.CURRENT_PERIOD]
-            if idx < len(row) and row[idx]:
-                values['current_period'] = self._clean_numeric_value(row[idx])
+            value = self._extract_with_offset(row, idx, 'numeric')
+            if value:
+                values['current_period'] = self._clean_numeric_value(value)
 
         # 提取期初数据
         if ColumnType.PREVIOUS_PERIOD in column_map:
             idx = column_map[ColumnType.PREVIOUS_PERIOD]
-            if idx < len(row) and row[idx]:
-                values['previous_period'] = self._clean_numeric_value(row[idx])
+            value = self._extract_with_offset(row, idx, 'numeric')
+            if value:
+                values['previous_period'] = self._clean_numeric_value(value)
 
         # 提取附注
         if ColumnType.NOTE in column_map:
             idx = column_map[ColumnType.NOTE]
-            if idx < len(row) and row[idx]:
-                note_value = str(row[idx]).strip()
+            value = self._extract_with_offset(row, idx, 'note')
+            if value:
+                note_value = str(value).strip()
                 if self._is_note_format(note_value):
                     values['note'] = note_value
 
         return values
+
+    def _extract_with_offset(self, row: List[str], base_idx: int,
+                            value_type: Optional[str] = None) -> Optional[str]:
+        """
+        从行中提取值，支持列偏移检测
+
+        当目标列为空或None时，尝试检查相邻列（处理合并单元格导致的列偏移）
+
+        Args:
+            row: 行数据
+            base_idx: 基准列索引
+            value_type: 期望的值类型 ('numeric', 'note', None)
+
+        Returns:
+            Optional[str]: 提取的值
+        """
+        # 定义搜索偏移量：先尝试原位置，然后尝试-1, +1, -2, +2, -3, +3
+        offsets = [0, -1, 1, -2, 2, -3, 3]
+
+        for offset in offsets:
+            idx = base_idx + offset
+
+            # 检查索引是否有效
+            if idx < 0 or idx >= len(row):
+                continue
+
+            cell = row[idx]
+
+            # 跳过None和空字符串
+            if cell is None or (isinstance(cell, str) and not cell.strip()):
+                continue
+
+            cell_text = str(cell).strip()
+
+            # 如果没有指定类型，返回第一个非空值
+            if value_type is None:
+                if offset != 0:
+                    logger.debug(f"列偏移检测: 在列{idx}找到值(偏移{offset}): '{cell_text[:30]}'")
+                return cell
+
+            # 验证值类型
+            if value_type == 'numeric':
+                if self._is_numeric_format(cell_text):
+                    if offset != 0:
+                        logger.debug(f"列偏移检测: 在列{idx}找到数值(偏移{offset}): '{cell_text}'")
+                    return cell
+            elif value_type == 'note':
+                if self._is_note_format(cell_text):
+                    if offset != 0:
+                        logger.debug(f"列偏移检测: 在列{idx}找到附注(偏移{offset}): '{cell_text}'")
+                    return cell
+
+        return None
 
     def _clean_numeric_value(self, value: str) -> Optional[str]:
         """
