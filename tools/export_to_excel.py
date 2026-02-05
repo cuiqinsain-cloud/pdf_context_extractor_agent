@@ -148,12 +148,39 @@ def result_to_dataframe(company_name, result):
             '附注': item_data.get('note', '')
         })
 
-    # 所有者权益
-    for item_name, item_data in result['equity'].items():
+    # 所有者权益（普通项目）
+    equity_items = result['equity'].get('items', {})
+    for item_name, item_data in equity_items.items():
         rows.append({
             '公司': company_name,
             '类别': '所有者权益',
             '项目': item_name,
+            '原始名称': item_data.get('original_name', ''),
+            '本期金额': item_data.get('current_period', ''),
+            '上期金额': item_data.get('previous_period', ''),
+            '附注': item_data.get('note', '')
+        })
+
+    # 归属于母公司所有者权益合计
+    if result['equity'].get('parent_equity_total'):
+        item_data = result['equity']['parent_equity_total']
+        rows.append({
+            '公司': company_name,
+            '类别': '所有者权益',
+            '项目': '归属于母公司所有者权益合计',
+            '原始名称': item_data.get('original_name', ''),
+            '本期金额': item_data.get('current_period', ''),
+            '上期金额': item_data.get('previous_period', ''),
+            '附注': item_data.get('note', '')
+        })
+
+    # 所有者权益合计
+    if result['equity'].get('equity_total'):
+        item_data = result['equity']['equity_total']
+        rows.append({
+            '公司': company_name,
+            '类别': '所有者权益',
+            '项目': '所有者权益合计',
             '原始名称': item_data.get('original_name', ''),
             '本期金额': item_data.get('current_period', ''),
             '上期金额': item_data.get('previous_period', ''),
@@ -196,7 +223,7 @@ def create_summary_dataframe(all_results):
             '非流动资产项数': len(result['assets']['non_current_assets']),
             '流动负债项数': len(result['liabilities']['current_liabilities']),
             '非流动负债项数': len(result['liabilities']['non_current_liabilities']),
-            '所有者权益项数': len(result['equity'])
+            '所有者权益项数': len(result['equity'].get('items', {}))
         })
 
     return pd.DataFrame(rows)

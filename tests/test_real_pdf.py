@@ -109,7 +109,7 @@ def test_single_company(test_case):
         print(f"  - 非流动负债: {non_current_liabilities_count} 项")
 
         # 权益项目
-        equity_count = len(result['equity'])
+        equity_count = len(result['equity'].get('items', {}))
         print(f"\n所有者权益项目: {equity_count} 项")
 
         # 关键项目示例

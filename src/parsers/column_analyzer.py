@@ -353,24 +353,51 @@ class ColumnAnalyzer:
         return values
 
     def _extract_with_offset(self, row: List[str], base_idx: int,
-                            value_type: Optional[str] = None) -> Optional[str]:
+                            value_type: Optional[str] = None, max_offset: int = 3) -> Optional[str]:
         """
         从行中提取值，支持列偏移检测
 
         当目标列为空或None时，尝试检查相邻列（处理合并单元格导致的列偏移）
 
+        注意：为避免误提取相邻数值列的值，偏移检测仅限于小范围（默认±3列）
+        且仅在目标列为空时才进行偏移检测
+
         Args:
             row: 行数据
             base_idx: 基准列索引
             value_type: 期望的值类型 ('numeric', 'note', None)
+            max_offset: 最大偏移量（默认3）
 
         Returns:
             Optional[str]: 提取的值
         """
-        # 定义搜索偏移量：先尝试原位置，然后尝试-1, +1, -2, +2, -3, +3
-        offsets = [0, -1, 1, -2, 2, -3, 3]
+        # 首先检查目标列本身
+        if 0 <= base_idx < len(row):
+            cell = row[base_idx]
+            if cell is not None and (not isinstance(cell, str) or cell.strip()):
+                cell_text = str(cell).strip()
+
+                # 如果没有指定类型，直接返回
+                if value_type is None:
+                    return cell
+
+                # 验证值类型
+                if value_type == 'numeric' and self._is_numeric_format(cell_text):
+                    return cell
+                elif value_type == 'note' and self._is_note_format(cell_text):
+                    return cell
+
+        # 目标列为空，尝试偏移检测（仅限小范围）
+        # 对于数值类型，只尝试向左偏移（避免误取下一个数值列）
+        if value_type == 'numeric':
+            offsets = [-1, -2]  # 只向左偏移，避免误取上期/下期的值
+        else:
+            offsets = [-1, 1, -2, 2]  # 非数值类型可以双向偏移
 
         for offset in offsets:
+            if abs(offset) > max_offset:
+                continue
+
             idx = base_idx + offset
 
             # 检查索引是否有效
@@ -387,20 +414,17 @@ class ColumnAnalyzer:
 
             # 如果没有指定类型，返回第一个非空值
             if value_type is None:
-                if offset != 0:
-                    logger.debug(f"列偏移检测: 在列{idx}找到值(偏移{offset}): '{cell_text[:30]}'")
+                logger.debug(f"列偏移检测: 在列{idx}找到值(偏移{offset}): '{cell_text[:30]}'")
                 return cell
 
             # 验证值类型
             if value_type == 'numeric':
                 if self._is_numeric_format(cell_text):
-                    if offset != 0:
-                        logger.debug(f"列偏移检测: 在列{idx}找到数值(偏移{offset}): '{cell_text}'")
+                    logger.debug(f"列偏移检测: 在列{idx}找到数值(偏移{offset}): '{cell_text}'")
                     return cell
             elif value_type == 'note':
                 if self._is_note_format(cell_text):
-                    if offset != 0:
-                        logger.debug(f"列偏移检测: 在列{idx}找到附注(偏移{offset}): '{cell_text}'")
+                    logger.debug(f"列偏移检测: 在列{idx}找到附注(偏移{offset}): '{cell_text}'")
                     return cell
 
         return None

@@ -36,8 +36,7 @@ class BalanceSheetParser:
                 '合同资产': [r'合同资产'],
                 '持有待售资产': [r'持有待售资产'],
                 '一年内到期的非流动资产': [r'一年内到期的非流动资产'],
-                '其他流动资产': [r'其他流动资产'],
-                '流动资产合计': [r'^流动资产合计$']
+                '其他流动资产': [r'其他流动资产']
             },
             # 非流动资产
             'non_current_assets': {
@@ -58,8 +57,7 @@ class BalanceSheetParser:
                 '商誉': [r'商誉'],
                 '长期待摊费用': [r'长期待摊费用'],
                 '递延所得税资产': [r'递延所得税资产'],
-                '其他非流动资产': [r'其他非流动资产'],
-                '非流动资产合计': [r'^非流动资产合计$']
+                '其他非流动资产': [r'其他非流动资产']
             }
         }
 
@@ -79,8 +77,7 @@ class BalanceSheetParser:
                 '其他应付款': [r'其他应付款'],
                 '持有待售负债': [r'持有待售负债'],
                 '一年内到期的非流动负债': [r'一年内到期的非流动负债'],
-                '其他流动负债': [r'其他流动负债'],
-                '流动负债合计': [r'^流动负债合计$']
+                '其他流动负债': [r'其他流动负债']
             },
             # 非流动负债
             'non_current_liabilities': {
@@ -94,8 +91,7 @@ class BalanceSheetParser:
                 '预计负债': [r'预计负债'],
                 '递延收益': [r'递延收益'],
                 '递延所得税负债': [r'递延所得税负债'],
-                '其他非流动负债': [r'其他非流动负债'],
-                '非流动负债合计': [r'^非流动负债合计$']
+                '其他非流动负债': [r'其他非流动负债']
             }
         }
 
@@ -111,9 +107,7 @@ class BalanceSheetParser:
             '专项储备': [r'专项储备'],
             '盈余公积': [r'盈余公积'],
             '未分配利润': [r'未分配利润'],
-            '归属于母公司所有者权益合计': [r'归属于母公司所有者权益（或股东权益）?\s*合\s*计', r'归属于母公司.*权益.*合\s*计'],
-            '少数股东权益': [r'少数股东权益'],
-            '所有者权益合计': [r'所有者权益（或股东权益）?\s*合\s*计', r'股东权益\s*合\s*计']
+            '少数股东权益': [r'少数股东权益']
         }
 
     def parse_balance_sheet(self, table_data: List[List[str]]) -> Dict[str, Any]:
@@ -133,15 +127,23 @@ class BalanceSheetParser:
             'report_type': '合并资产负债表',
             'assets': {
                 'current_assets': {},
+                'current_assets_total': {},  # 流动资产合计
                 'non_current_assets': {},
-                'assets_total': {}
+                'non_current_assets_total': {},  # 非流动资产合计
+                'assets_total': {}  # 资产总计
             },
             'liabilities': {
                 'current_liabilities': {},
+                'current_liabilities_total': {},  # 流动负债合计
                 'non_current_liabilities': {},
-                'liabilities_total': {}
+                'non_current_liabilities_total': {},  # 非流动负债合计
+                'liabilities_total': {}  # 负债合计
             },
-            'equity': {},
+            'equity': {
+                'items': {},  # 所有者权益普通项目
+                'parent_equity_total': {},  # 归属于母公司所有者权益合计
+                'equity_total': {}  # 所有者权益合计
+            },
             'liabilities_and_equity_total': {},
             'parsing_info': {
                 'total_rows': len(table_data),
@@ -217,7 +219,7 @@ class BalanceSheetParser:
             if not matched:
                 matched, matched_name = self._match_and_store_item_with_name(
                     item_name, values, self.equity_patterns,
-                    result['equity'], result, 'equity'
+                    result['equity']['items'], result, 'equity.items'
                 )
                 if matched:
                     matched_item_name = matched_name
@@ -225,6 +227,12 @@ class BalanceSheetParser:
             # 匹配总计项目
             if not matched:
                 matched = self._match_total_items(item_name, values, result)
+
+            # 检测合并资产负债表的结束标志：负债和所有者权益总计
+            # 这是合并资产负债表的最后一行，之后的数据是母公司报表，应该停止解析
+            if re.search(r'负债和所有者权益.{0,10}总计|负债和股东权益.{0,10}总计', item_name):
+                logger.info(f"检测到合并资产负债表结束标志于第{row_idx}行：{item_name}，停止解析")
+                break
 
             # 记录匹配结果
             if matched:
@@ -437,7 +445,7 @@ class BalanceSheetParser:
 
     def _match_total_items(self, item_name: str, values: Dict[str, str], result: Dict) -> bool:
         """
-        匹配总计类项目
+        匹配总计类项目（包括中间合计项和顶级合计项）
 
         Args:
             item_name (str): 项目名称
@@ -447,12 +455,33 @@ class BalanceSheetParser:
         Returns:
             bool: 是否成功匹配
         """
+        item_data = {
+            'original_name': item_name,
+            **values
+        }
+
+        # 流动资产合计
+        if re.search(r'^流动资产合计$', item_name):
+            result['assets']['current_assets_total'] = item_data
+            result['ordered_items'].append({
+                'section': 'assets.current_assets_total',
+                'standard_name': 'current_assets_total',
+                'data': item_data
+            })
+            return True
+
+        # 非流动资产合计
+        elif re.search(r'^非流动资产合计$', item_name):
+            result['assets']['non_current_assets_total'] = item_data
+            result['ordered_items'].append({
+                'section': 'assets.non_current_assets_total',
+                'standard_name': 'non_current_assets_total',
+                'data': item_data
+            })
+            return True
+
         # 资产总计
-        if re.search(r'资产总计', item_name):
-            item_data = {
-                'original_name': item_name,
-                **values
-            }
+        elif re.search(r'资产总计', item_name):
             result['assets']['assets_total'] = item_data
             result['ordered_items'].append({
                 'section': 'assets.assets_total',
@@ -461,12 +490,28 @@ class BalanceSheetParser:
             })
             return True
 
-        # 负债总计
+        # 流动负债合计
+        elif re.search(r'^流动负债合计$', item_name):
+            result['liabilities']['current_liabilities_total'] = item_data
+            result['ordered_items'].append({
+                'section': 'liabilities.current_liabilities_total',
+                'standard_name': 'current_liabilities_total',
+                'data': item_data
+            })
+            return True
+
+        # 非流动负债合计
+        elif re.search(r'^非流动负债合计$', item_name):
+            result['liabilities']['non_current_liabilities_total'] = item_data
+            result['ordered_items'].append({
+                'section': 'liabilities.non_current_liabilities_total',
+                'standard_name': 'non_current_liabilities_total',
+                'data': item_data
+            })
+            return True
+
+        # 负债合计
         elif re.search(r'负债合计', item_name):
-            item_data = {
-                'original_name': item_name,
-                **values
-            }
             result['liabilities']['liabilities_total'] = item_data
             result['ordered_items'].append({
                 'section': 'liabilities.liabilities_total',
@@ -475,12 +520,28 @@ class BalanceSheetParser:
             })
             return True
 
+        # 归属于母公司所有者权益合计
+        elif re.search(r'归属于母公司所有者权益（或股东权益）?\s*合\s*计|归属于母公司.*权益.*合\s*计', item_name):
+            result['equity']['parent_equity_total'] = item_data
+            result['ordered_items'].append({
+                'section': 'equity.parent_equity_total',
+                'standard_name': 'parent_equity_total',
+                'data': item_data
+            })
+            return True
+
+        # 所有者权益合计
+        elif re.search(r'所有者权益（或股东权益）?\s*合\s*计|股东权益\s*合\s*计', item_name):
+            result['equity']['equity_total'] = item_data
+            result['ordered_items'].append({
+                'section': 'equity.equity_total',
+                'standard_name': 'equity_total',
+                'data': item_data
+            })
+            return True
+
         # 负债和所有者权益总计
         elif re.search(r'负债和所有者权益.{0,10}总计|负债和股东权益.{0,10}总计', item_name):
-            item_data = {
-                'original_name': item_name,
-                **values
-            }
             result['liabilities_and_equity_total'] = item_data
             result['ordered_items'].append({
                 'section': 'liabilities_and_equity_total',
@@ -527,7 +588,7 @@ class BalanceSheetParser:
             # 1.1 流动资产合计验证
             level1_result = self._validate_subtotal(
                 parsed_data.get('assets', {}).get('current_assets', {}),
-                parsed_data.get('assets', {}).get('current_assets', {}).get('流动资产合计'),
+                parsed_data.get('assets', {}).get('current_assets_total'),
                 '流动资产合计',
                 tolerance_rate
             )
@@ -539,7 +600,7 @@ class BalanceSheetParser:
             # 1.2 非流动资产合计验证
             level1_result = self._validate_subtotal(
                 parsed_data.get('assets', {}).get('non_current_assets', {}),
-                parsed_data.get('assets', {}).get('non_current_assets', {}).get('非流动资产合计'),
+                parsed_data.get('assets', {}).get('non_current_assets_total'),
                 '非流动资产合计',
                 tolerance_rate
             )
@@ -551,7 +612,7 @@ class BalanceSheetParser:
             # 1.3 流动负债合计验证
             level1_result = self._validate_subtotal(
                 parsed_data.get('liabilities', {}).get('current_liabilities', {}),
-                parsed_data.get('liabilities', {}).get('current_liabilities', {}).get('流动负债合计'),
+                parsed_data.get('liabilities', {}).get('current_liabilities_total'),
                 '流动负债合计',
                 tolerance_rate
             )
@@ -563,7 +624,7 @@ class BalanceSheetParser:
             # 1.4 非流动负债合计验证
             level1_result = self._validate_subtotal(
                 parsed_data.get('liabilities', {}).get('non_current_liabilities', {}),
-                parsed_data.get('liabilities', {}).get('non_current_liabilities', {}).get('非流动负债合计'),
+                parsed_data.get('liabilities', {}).get('non_current_liabilities_total'),
                 '非流动负债合计',
                 tolerance_rate
             )
@@ -574,9 +635,9 @@ class BalanceSheetParser:
 
             # 1.5 所有者权益合计验证
             level1_result = self._validate_subtotal(
-                parsed_data.get('equity', {}),
-                parsed_data.get('equity', {}).get('所有者权益合计') or
-                parsed_data.get('equity', {}).get('归属于母公司所有者权益合计'),
+                parsed_data.get('equity', {}).get('items', {}),
+                parsed_data.get('equity', {}).get('equity_total') or
+                parsed_data.get('equity', {}).get('parent_equity_total'),
                 '所有者权益合计',
                 tolerance_rate
             )
@@ -589,10 +650,10 @@ class BalanceSheetParser:
 
             # 2.1 资产总计 = 流动资产合计 + 非流动资产合计
             current_assets_total = self._get_numeric_value(
-                parsed_data.get('assets', {}).get('current_assets', {}).get('流动资产合计', {}).get('current_period')
+                parsed_data.get('assets', {}).get('current_assets_total', {}).get('current_period')
             )
             non_current_assets_total = self._get_numeric_value(
-                parsed_data.get('assets', {}).get('non_current_assets', {}).get('非流动资产合计', {}).get('current_period')
+                parsed_data.get('assets', {}).get('non_current_assets_total', {}).get('current_period')
             )
             assets_total = self._get_numeric_value(
                 parsed_data.get('assets', {}).get('assets_total', {}).get('current_period')
@@ -621,10 +682,10 @@ class BalanceSheetParser:
 
             # 2.2 负债合计 = 流动负债合计 + 非流动负债合计
             current_liabilities_total = self._get_numeric_value(
-                parsed_data.get('liabilities', {}).get('current_liabilities', {}).get('流动负债合计', {}).get('current_period')
+                parsed_data.get('liabilities', {}).get('current_liabilities_total', {}).get('current_period')
             )
             non_current_liabilities_total = self._get_numeric_value(
-                parsed_data.get('liabilities', {}).get('non_current_liabilities', {}).get('非流动负债合计', {}).get('current_period')
+                parsed_data.get('liabilities', {}).get('non_current_liabilities_total', {}).get('current_period')
             )
             liabilities_total = self._get_numeric_value(
                 parsed_data.get('liabilities', {}).get('liabilities_total', {}).get('current_period')
@@ -653,9 +714,9 @@ class BalanceSheetParser:
 
             # 2.3 负债和所有者权益总计 = 负债合计 + 所有者权益合计
             equity_total = self._get_numeric_value(
-                parsed_data.get('equity', {}).get('所有者权益合计', {}).get('current_period')
+                parsed_data.get('equity', {}).get('equity_total', {}).get('current_period')
             ) or self._get_numeric_value(
-                parsed_data.get('equity', {}).get('归属于母公司所有者权益合计', {}).get('current_period')
+                parsed_data.get('equity', {}).get('parent_equity_total', {}).get('current_period')
             )
             liab_equity_total = self._get_numeric_value(
                 parsed_data.get('liabilities_and_equity_total', {}).get('current_period')
