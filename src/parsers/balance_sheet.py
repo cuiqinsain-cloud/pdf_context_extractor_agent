@@ -165,7 +165,9 @@ class BalanceSheetParser:
                 continue
 
             # 获取项目名称（通常在第一列）
+            # 清理换行符和多余空白，确保正则表达式能正确匹配
             item_name = row[0].strip() if row[0] else ""
+            item_name = item_name.replace('\n', '').replace('\r', '').strip()
 
             if not item_name:
                 continue
