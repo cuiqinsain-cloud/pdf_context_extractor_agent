@@ -8,7 +8,11 @@
 
 ## 📋 项目简介
 
-专业的PDF财务报表数据提取工具，能够从A股上市公司年报PDF中自动提取和解析合并资产负债表数据。
+专业的PDF财务报表数据提取工具，能够从A股上市公司年报PDF中自动提取和解析财务报表数据。
+
+**支持的报表类型**：
+- ✅ 合并资产负债表
+- ✅ 合并利润表（新增）
 
 **核心特性**：
 - ✅ 动态列结构识别 - 自动适应不同格式
@@ -17,7 +21,7 @@
 - ✅ 三层级平衡性验证 - 细粒度数据验证
 - ✅ Excel导出 - 一键导出结构化数据
 
-**当前版本**: v1.0.6
+**当前版本**: v1.1.2
 
 ## 🚀 快速开始
 
@@ -41,6 +45,8 @@ pip install -r requirements.txt
 
 ### 2. 基本使用
 
+#### 解析资产负债表
+
 ```python
 from src.pdf_reader import PDFReader
 from src.table_extractor import TableExtractor
@@ -61,14 +67,39 @@ with PDFReader('path/to/annual_report.pdf') as pdf_reader:
     result = parser.parse_balance_sheet(merged_data)
 ```
 
+#### 解析利润表
+
+```python
+from src.pdf_reader import PDFReader
+from src.table_extractor import TableExtractor
+from src.parsers.income_statement import IncomeStatementParser
+
+# 读取PDF并提取表格
+with PDFReader('path/to/annual_report.pdf') as pdf_reader:
+    table_extractor = TableExtractor()
+    pages = pdf_reader.get_pages((93, 95))
+    tables = table_extractor.extract_tables_from_pages(pages)
+
+    # 解析利润表
+    parser = IncomeStatementParser()
+    merged_data = []
+    for table_dict in tables:
+        merged_data.extend(table_dict['data'])
+
+    result = parser.parse_income_statement(merged_data)
+```
+
 ### 3. 批量处理
 
 ```bash
 # 激活虚拟环境
 source venv/bin/activate
 
-# 运行批量处理并导出Excel
+# 导出资产负债表数据
 python tools/export_to_excel.py
+
+# 导出利润表数据
+python tools/export_income_statement.py
 ```
 
 ## 📚 文档导航
@@ -92,7 +123,8 @@ pdf_context_extractor_agent/
 │   ├── pdf_reader.py
 │   ├── table_extractor.py
 │   └── parsers/             # 解析器模块
-│       ├── balance_sheet.py
+│       ├── balance_sheet.py           # 资产负债表解析器
+│       ├── income_statement.py        # 利润表解析器
 │       ├── column_analyzer.py
 │       ├── hybrid_column_analyzer.py  # 混合识别
 │       └── llm_client.py              # LLM客户端
@@ -116,8 +148,11 @@ python tests/test_column_analyzer.py
 # 集成测试
 python tests/test_integration.py
 
-# 真实PDF测试
+# 真实PDF测试 - 资产负债表
 python tests/test_real_pdf.py
+
+# 真实PDF测试 - 利润表
+python tests/test_income_statement.py
 
 # LLM集成测试
 python tests/test_llm_integration.py
@@ -140,4 +175,4 @@ A: 测试PDF文件位于 `tests/sample_pdfs/` 目录。
 
 ---
 
-**最后更新**: 2026-02-05 | **版本**: v1.0.6
+**最后更新**: 2026-02-05 | **版本**: v1.1.2
