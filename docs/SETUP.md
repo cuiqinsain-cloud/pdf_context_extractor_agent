@@ -138,16 +138,23 @@ cp config/llm_config.template.json config/llm_config.json
 vim config/llm_config.json  # 或使用其他编辑器
 ```
 
-### 4.2 配置参数
+### 4.2 必填参数
 
-**必填参数**:
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| **provider** | LLM提供商 | `anthropic` / `openrouter` / `custom` |
+| **base_url** | API基础URL | `https://api.anthropic.com` |
+| **model** | 模型名称 | `claude-3-5-sonnet-20241022` |
+| **api_key_env** | API密钥环境变量名 | `LLM_API_KEY` |
+
+**配置示例**:
 ```json
 {
   "llm_api": {
-    "provider": "chaitin",  # 您的LLM提供商
-    "base_url": "https://aiapi.chaitin.net",  # API地址
-    "model": "glm-4.7",  # 模型名称
-    "api_key_env": "LLM_API_KEY"  # 环境变量名
+    "provider": "anthropic",
+    "base_url": "https://api.anthropic.com",
+    "model": "claude-3-5-sonnet-20241022",
+    "api_key_env": "LLM_API_KEY"
   }
 }
 ```
@@ -176,11 +183,68 @@ EOF
 # 注意：.env 文件已在 .gitignore 中，不会被提交
 ```
 
-### 4.4 验证配置
+### 4.4 常用Provider配置
+
+**Anthropic Claude（官方，推荐）**:
+```json
+{
+  "llm_api": {
+    "provider": "anthropic",
+    "base_url": "https://api.anthropic.com",
+    "model": "claude-3-5-sonnet-20241022",
+    "api_key_env": "LLM_API_KEY"
+  }
+}
+```
+- 环境变量: `export LLM_API_KEY="sk-ant-api03-..."`
+- 获取API Key: https://console.anthropic.com/
+
+**OpenRouter（多模型平台）**:
+```json
+{
+  "llm_api": {
+    "provider": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "model": "anthropic/claude-3.5-sonnet",
+    "api_key_env": "LLM_API_KEY"
+  }
+}
+```
+- 环境变量: `export LLM_API_KEY="sk-or-v1-..."`
+- 获取API Key: https://openrouter.ai/
+
+**自定义代理/中转**:
+```json
+{
+  "llm_api": {
+    "provider": "custom",
+    "base_url": "https://your-proxy.com/v1",
+    "model": "claude-3-5-sonnet-20241022",
+    "api_key_env": "LLM_API_KEY"
+  }
+}
+```
+
+### 4.5 可选参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| **max_tokens** | 1024 | 最大生成token数 |
+| **temperature** | 0.0 | 温度（0=确定性，1=创造性） |
+| **timeout** | 30 | 请求超时时间（秒） |
+| **max_retries** | 3 | 最大重试次数 |
+| **enable_llm** | true | 是否启用LLM识别 |
+| **always_use_llm** | false | 是否总是调用LLM |
+| **cache_llm_results** | true | 是否缓存LLM结果 |
+
+### 4.6 验证配置
 
 ```bash
 # 激活虚拟环境
 source venv/bin/activate
+
+# 检查环境变量
+echo $LLM_API_KEY
 
 # 运行配置测试
 python tests/test_llm_config.py
@@ -189,10 +253,6 @@ python tests/test_llm_config.py
 # ✓ 配置文件加载成功
 # ✓ API Key 已设置
 ```
-
-### 4.5 LLM配置详细说明
-
-详见：[LLM配置指南](guides/llm_config.md)
 
 ---
 
@@ -324,7 +384,19 @@ cp config/llm_config.template.json config/llm_config.json
 **解决**:
 1. 检查网络连接
 2. 验证API Key是否有效
-3. 增加timeout配置（在llm_config.json中）
+3. 增加timeout配置（在llm_config.json中设置 `"timeout": 60`）
+
+**问题**: 认证失败 (401 Unauthorized)
+**解决**:
+1. 检查API Key是否正确
+2. 检查provider和base_url是否匹配
+3. 确认API Key未过期
+
+**问题**: 模型不存在
+**解决**:
+1. 检查模型名称拼写
+2. 确认provider支持该模型
+3. 参考上面的Provider配置示例
 
 ---
 

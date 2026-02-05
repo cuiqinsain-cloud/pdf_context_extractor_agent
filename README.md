@@ -73,19 +73,12 @@ python tools/export_to_excel.py
 
 ## 📚 文档导航
 
-### 核心文档
+- **[环境配置](docs/SETUP.md)** - 环境配置指南（虚拟环境、依赖安装、LLM配置）
 - **[功能说明](docs/FEATURES.md)** - 详细功能介绍和使用方法
 - **[开发进展](docs/DEVELOPMENT.md)** - 当前状态、已知问题、路线图
-- **[环境配置](docs/SETUP.md)** - 详细的环境配置指南（包括虚拟环境、LLM配置）
 - **[技术架构](docs/ARCHITECTURE.md)** - 系统架构和核心技术
 
-### 设计文档
-- [列结构分析器设计](docs/design/column_analyzer.md) - 动态列识别技术
-- [LLM集成设计](docs/design/llm_integration.md) - 混合识别方案
-
-### 使用指南
-- [快速开始指南](docs/guides/quick_start.md) - 详细的入门教程
-- [LLM配置指南](docs/guides/llm_config.md) - LLM功能配置
+历史文档归档在 `docs/archive/` 目录
 
 ## 📁 项目结构
 
