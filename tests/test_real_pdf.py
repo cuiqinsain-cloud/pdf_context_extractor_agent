@@ -132,15 +132,41 @@ def test_single_company(test_case):
         print("-" * 80)
         validation = parser.validate_balance_sheet(result)
 
-        if validation['balance_check']:
-            status = validation['balance_check']['status']
-            if status == 'passed':
-                print(f"✓ 平衡性检查: 通过")
-            else:
-                print(f"✗ 平衡性检查: 失败")
-                print(f"  差额: {validation['balance_check']['difference']:,.2f}")
+        # 显示三层级验证结果
+        balance_check = validation.get('balance_check', {})
 
-        print(f"完整性评分: {validation['completeness_score']:.1%}")
+        # 层级1：子项目合计
+        level1_checks = balance_check.get('level1_subtotal_checks', [])
+        if level1_checks:
+            print("\n【层级1：子项目合计验证】")
+            for check in level1_checks:
+                status = "✓" if check.get('passed') else "✗"
+                print(f"  {status} {check.get('name')}: ", end="")
+                if check.get('calculated') is not None:
+                    print(f"计算={check['calculated']:,.2f}, 报表={check['reported']:,.2f}, 差额={check['difference']:,.2f}")
+                else:
+                    print(check.get('message', ''))
+
+        # 层级2：大类合计
+        level2_checks = balance_check.get('level2_category_checks', [])
+        if level2_checks:
+            print("\n【层级2：大类合计验证】")
+            for check in level2_checks:
+                status = "✓" if check.get('passed') else "✗"
+                print(f"  {status} {check.get('name')}: 计算={check['calculated']:,.2f}, 报表={check['reported']:,.2f}, 差额={check['difference']:,.2f}")
+
+        # 层级3：总平衡
+        level3_check = balance_check.get('level3_total_check')
+        if level3_check:
+            print("\n【层级3：总平衡验证】")
+            status = "✓" if level3_check.get('passed') else "✗"
+            print(f"  {status} 资产总计 = 负债和所有者权益总计")
+            print(f"     资产总计: {level3_check['assets_total']:,.2f}")
+            print(f"     负债和所有者权益总计: {level3_check['liabilities_and_equity_total']:,.2f}")
+            print(f"     差额: {level3_check['difference']:,.2f}")
+
+        print(f"\n完整性评分: {validation['completeness_score']:.1%}")
+        print(f"总体验证结果: {'✓ 通过' if validation['is_valid'] else '✗ 失败'}")
 
         if validation['errors']:
             print(f"\n错误 ({len(validation['errors'])}):")

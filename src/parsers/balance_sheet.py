@@ -495,6 +495,11 @@ class BalanceSheetParser:
         """
         验证资产负债表数据的完整性和准确性
 
+        实现三层级平衡性检查：
+        - 层级1：子项目合计验证（流动/非流动资产、负债、权益）
+        - 层级2：大类合计验证（资产总计、负债合计）
+        - 层级3：总平衡验证（资产总计 = 负债和所有者权益总计）
+
         Args:
             parsed_data (Dict[str, Any]): 解析后的数据
 
@@ -505,41 +510,201 @@ class BalanceSheetParser:
             'is_valid': True,
             'errors': [],
             'warnings': [],
-            'balance_check': None,
+            'balance_check': {
+                'level1_subtotal_checks': [],  # 层级1：子项目合计
+                'level2_category_checks': [],  # 层级2：大类合计
+                'level3_total_check': None     # 层级3：总平衡
+            },
             'completeness_score': 0.0
         }
 
         try:
-            # 1. 平衡性检查：资产总计 = 负债和所有者权益总计
+            tolerance_rate = 0.001  # 0.1%容差
+
+            # ========== 层级1：子项目合计验证 ==========
+            logger.info("开始层级1验证：子项目合计")
+
+            # 1.1 流动资产合计验证
+            level1_result = self._validate_subtotal(
+                parsed_data.get('assets', {}).get('current_assets', {}),
+                parsed_data.get('assets', {}).get('current_assets', {}).get('流动资产合计'),
+                '流动资产合计',
+                tolerance_rate
+            )
+            validation_result['balance_check']['level1_subtotal_checks'].append(level1_result)
+            if not level1_result['passed']:
+                validation_result['errors'].append(level1_result['message'])
+                validation_result['is_valid'] = False
+
+            # 1.2 非流动资产合计验证
+            level1_result = self._validate_subtotal(
+                parsed_data.get('assets', {}).get('non_current_assets', {}),
+                parsed_data.get('assets', {}).get('non_current_assets', {}).get('非流动资产合计'),
+                '非流动资产合计',
+                tolerance_rate
+            )
+            validation_result['balance_check']['level1_subtotal_checks'].append(level1_result)
+            if not level1_result['passed']:
+                validation_result['errors'].append(level1_result['message'])
+                validation_result['is_valid'] = False
+
+            # 1.3 流动负债合计验证
+            level1_result = self._validate_subtotal(
+                parsed_data.get('liabilities', {}).get('current_liabilities', {}),
+                parsed_data.get('liabilities', {}).get('current_liabilities', {}).get('流动负债合计'),
+                '流动负债合计',
+                tolerance_rate
+            )
+            validation_result['balance_check']['level1_subtotal_checks'].append(level1_result)
+            if not level1_result['passed']:
+                validation_result['errors'].append(level1_result['message'])
+                validation_result['is_valid'] = False
+
+            # 1.4 非流动负债合计验证
+            level1_result = self._validate_subtotal(
+                parsed_data.get('liabilities', {}).get('non_current_liabilities', {}),
+                parsed_data.get('liabilities', {}).get('non_current_liabilities', {}).get('非流动负债合计'),
+                '非流动负债合计',
+                tolerance_rate
+            )
+            validation_result['balance_check']['level1_subtotal_checks'].append(level1_result)
+            if not level1_result['passed']:
+                validation_result['errors'].append(level1_result['message'])
+                validation_result['is_valid'] = False
+
+            # 1.5 所有者权益合计验证
+            level1_result = self._validate_subtotal(
+                parsed_data.get('equity', {}),
+                parsed_data.get('equity', {}).get('所有者权益合计') or
+                parsed_data.get('equity', {}).get('归属于母公司所有者权益合计'),
+                '所有者权益合计',
+                tolerance_rate
+            )
+            validation_result['balance_check']['level1_subtotal_checks'].append(level1_result)
+            if not level1_result['passed']:
+                validation_result['warnings'].append(level1_result['message'])
+
+            # ========== 层级2：大类合计验证 ==========
+            logger.info("开始层级2验证：大类合计")
+
+            # 2.1 资产总计 = 流动资产合计 + 非流动资产合计
+            current_assets_total = self._get_numeric_value(
+                parsed_data.get('assets', {}).get('current_assets', {}).get('流动资产合计', {}).get('current_period')
+            )
+            non_current_assets_total = self._get_numeric_value(
+                parsed_data.get('assets', {}).get('non_current_assets', {}).get('非流动资产合计', {}).get('current_period')
+            )
             assets_total = self._get_numeric_value(
                 parsed_data.get('assets', {}).get('assets_total', {}).get('current_period')
+            )
+
+            if current_assets_total is not None and non_current_assets_total is not None and assets_total is not None:
+                calculated_total = current_assets_total + non_current_assets_total
+                difference = abs(calculated_total - assets_total)
+                tolerance = max(calculated_total, assets_total) * tolerance_rate
+                passed = difference <= tolerance
+
+                level2_result = {
+                    'name': '资产总计',
+                    'formula': '流动资产合计 + 非流动资产合计',
+                    'calculated': float(calculated_total),
+                    'reported': float(assets_total),
+                    'difference': float(difference),
+                    'tolerance': float(tolerance),
+                    'passed': passed,
+                    'message': f"资产总计验证{'通过' if passed else '失败'}：计算值={calculated_total:,.2f}, 报表值={assets_total:,.2f}, 差额={difference:,.2f}"
+                }
+                validation_result['balance_check']['level2_category_checks'].append(level2_result)
+                if not passed:
+                    validation_result['errors'].append(level2_result['message'])
+                    validation_result['is_valid'] = False
+
+            # 2.2 负债合计 = 流动负债合计 + 非流动负债合计
+            current_liabilities_total = self._get_numeric_value(
+                parsed_data.get('liabilities', {}).get('current_liabilities', {}).get('流动负债合计', {}).get('current_period')
+            )
+            non_current_liabilities_total = self._get_numeric_value(
+                parsed_data.get('liabilities', {}).get('non_current_liabilities', {}).get('非流动负债合计', {}).get('current_period')
+            )
+            liabilities_total = self._get_numeric_value(
+                parsed_data.get('liabilities', {}).get('liabilities_total', {}).get('current_period')
+            )
+
+            if current_liabilities_total is not None and non_current_liabilities_total is not None and liabilities_total is not None:
+                calculated_total = current_liabilities_total + non_current_liabilities_total
+                difference = abs(calculated_total - liabilities_total)
+                tolerance = max(calculated_total, liabilities_total) * tolerance_rate
+                passed = difference <= tolerance
+
+                level2_result = {
+                    'name': '负债合计',
+                    'formula': '流动负债合计 + 非流动负债合计',
+                    'calculated': float(calculated_total),
+                    'reported': float(liabilities_total),
+                    'difference': float(difference),
+                    'tolerance': float(tolerance),
+                    'passed': passed,
+                    'message': f"负债合计验证{'通过' if passed else '失败'}：计算值={calculated_total:,.2f}, 报表值={liabilities_total:,.2f}, 差额={difference:,.2f}"
+                }
+                validation_result['balance_check']['level2_category_checks'].append(level2_result)
+                if not passed:
+                    validation_result['errors'].append(level2_result['message'])
+                    validation_result['is_valid'] = False
+
+            # 2.3 负债和所有者权益总计 = 负债合计 + 所有者权益合计
+            equity_total = self._get_numeric_value(
+                parsed_data.get('equity', {}).get('所有者权益合计', {}).get('current_period')
+            ) or self._get_numeric_value(
+                parsed_data.get('equity', {}).get('归属于母公司所有者权益合计', {}).get('current_period')
             )
             liab_equity_total = self._get_numeric_value(
                 parsed_data.get('liabilities_and_equity_total', {}).get('current_period')
             )
 
-            if assets_total is not None and liab_equity_total is not None:
-                difference = abs(assets_total - liab_equity_total)
-                tolerance = max(assets_total, liab_equity_total) * 0.001  # 0.1%容差
+            if liabilities_total is not None and equity_total is not None and liab_equity_total is not None:
+                calculated_total = liabilities_total + equity_total
+                difference = abs(calculated_total - liab_equity_total)
+                tolerance = max(calculated_total, liab_equity_total) * tolerance_rate
+                passed = difference <= tolerance
 
-                if difference <= tolerance:
-                    validation_result['balance_check'] = {
-                        'status': 'passed',
-                        'difference': float(difference),
-                        'tolerance': float(tolerance)
-                    }
-                else:
-                    validation_result['balance_check'] = {
-                        'status': 'failed',
-                        'difference': float(difference),
-                        'tolerance': float(tolerance)
-                    }
-                    validation_result['errors'].append(
-                        f"资产负债不平衡，差额: {difference:,.2f}"
-                    )
+                level2_result = {
+                    'name': '负债和所有者权益总计',
+                    'formula': '负债合计 + 所有者权益合计',
+                    'calculated': float(calculated_total),
+                    'reported': float(liab_equity_total),
+                    'difference': float(difference),
+                    'tolerance': float(tolerance),
+                    'passed': passed,
+                    'message': f"负债和所有者权益总计验证{'通过' if passed else '失败'}：计算值={calculated_total:,.2f}, 报表值={liab_equity_total:,.2f}, 差额={difference:,.2f}"
+                }
+                validation_result['balance_check']['level2_category_checks'].append(level2_result)
+                if not passed:
+                    validation_result['errors'].append(level2_result['message'])
                     validation_result['is_valid'] = False
 
-            # 2. 完整性检查
+            # ========== 层级3：总平衡验证 ==========
+            logger.info("开始层级3验证：总平衡")
+
+            if assets_total is not None and liab_equity_total is not None:
+                difference = abs(assets_total - liab_equity_total)
+                tolerance = max(assets_total, liab_equity_total) * tolerance_rate
+                passed = difference <= tolerance
+
+                validation_result['balance_check']['level3_total_check'] = {
+                    'formula': '资产总计 = 负债和所有者权益总计',
+                    'assets_total': float(assets_total),
+                    'liabilities_and_equity_total': float(liab_equity_total),
+                    'difference': float(difference),
+                    'tolerance': float(tolerance),
+                    'passed': passed,
+                    'message': f"总平衡验证{'通过' if passed else '失败'}：资产总计={assets_total:,.2f}, 负债和所有者权益总计={liab_equity_total:,.2f}, 差额={difference:,.2f}"
+                }
+
+                if not passed:
+                    validation_result['errors'].append(validation_result['balance_check']['level3_total_check']['message'])
+                    validation_result['is_valid'] = False
+
+            # ========== 完整性检查 ==========
             essential_items = [
                 '货币资金', '应收账款', '存货', '固定资产',
                 '短期借款', '应付账款', '实收资本', '未分配利润'
@@ -569,7 +734,7 @@ class BalanceSheetParser:
                     f"关键项目完整性较低: {validation_result['completeness_score']:.1%}"
                 )
 
-            # 3. 数据合理性检查
+            # ========== 数据合理性检查 ==========
             unmatched_count = len(parsed_data.get('parsing_info', {}).get('unmatched_items', []))
             total_rows = parsed_data.get('parsing_info', {}).get('total_rows', 1)
 
@@ -581,12 +746,129 @@ class BalanceSheetParser:
         except Exception as e:
             validation_result['errors'].append(f"验证过程中出现错误: {str(e)}")
             validation_result['is_valid'] = False
+            logger.error(f"验证过程中出现错误: {str(e)}", exc_info=True)
 
-        logger.info(f"验证完成，结果: {validation_result['is_valid']}, "
-                   f"错误: {len(validation_result['errors'])}, "
-                   f"警告: {len(validation_result['warnings'])}")
+        # 统计验证结果
+        level1_passed = sum(1 for check in validation_result['balance_check']['level1_subtotal_checks'] if check.get('passed', False))
+        level1_total = len(validation_result['balance_check']['level1_subtotal_checks'])
+        level2_passed = sum(1 for check in validation_result['balance_check']['level2_category_checks'] if check.get('passed', False))
+        level2_total = len(validation_result['balance_check']['level2_category_checks'])
+        level3_passed = validation_result['balance_check']['level3_total_check'].get('passed', False) if validation_result['balance_check']['level3_total_check'] else False
+
+        logger.info(f"验证完成 - 层级1: {level1_passed}/{level1_total}, 层级2: {level2_passed}/{level2_total}, 层级3: {'通过' if level3_passed else '失败'}")
+        logger.info(f"总体结果: {validation_result['is_valid']}, 错误: {len(validation_result['errors'])}, 警告: {len(validation_result['warnings'])}")
 
         return validation_result
+
+    def _validate_subtotal(self, items_dict: Dict[str, Any], subtotal_item: Optional[Dict[str, Any]],
+                          subtotal_name: str, tolerance_rate: float) -> Dict[str, Any]:
+        """
+        验证子项目合计的正确性
+
+        Args:
+            items_dict: 包含所有子项目的字典
+            subtotal_item: 合计项目的数据
+            subtotal_name: 合计项目名称
+            tolerance_rate: 容差比例
+
+        Returns:
+            Dict[str, Any]: 验证结果
+        """
+        result = {
+            'name': subtotal_name,
+            'passed': False,
+            'calculated': None,
+            'reported': None,
+            'difference': None,
+            'tolerance': None,
+            'message': '',
+            'item_count': 0,
+            'deduction_items': []  # 记录减项
+        }
+
+        try:
+            # 获取报表中的合计值
+            if subtotal_item is None:
+                result['message'] = f"{subtotal_name}：未找到合计项目"
+                logger.warning(result['message'])
+                return result
+
+            reported_total = self._get_numeric_value(subtotal_item.get('current_period'))
+            if reported_total is None:
+                result['message'] = f"{subtotal_name}：合计值为空"
+                logger.warning(result['message'])
+                return result
+
+            # 定义减项关键字（这些项目需要从总额中减去）
+            deduction_keywords = ['减：', '减:', '减-']
+
+            # 计算子项目之和（排除合计项本身，正确处理减项）
+            calculated_total = 0.0
+            item_count = 0
+
+            for item_name, item_data in items_dict.items():
+                # 跳过合计项本身
+                if '合计' in item_name:
+                    continue
+
+                item_value = self._get_numeric_value(item_data.get('current_period'))
+                if item_value is not None:
+                    # 判断是否为减项
+                    is_deduction = any(keyword in item_name for keyword in deduction_keywords)
+
+                    if is_deduction:
+                        # 减项：从总额中减去
+                        calculated_total -= item_value
+                        result['deduction_items'].append({
+                            'name': item_name,
+                            'value': item_value
+                        })
+                        logger.debug(f"  减项: {item_name} = -{item_value:,.2f}")
+                    else:
+                        # 加项：加到总额中
+                        calculated_total += item_value
+                        logger.debug(f"  加项: {item_name} = +{item_value:,.2f}")
+
+                    item_count += 1
+
+            # 如果没有子项目，跳过验证
+            if item_count == 0:
+                result['message'] = f"{subtotal_name}：没有子项目数据"
+                result['passed'] = True  # 没有数据时认为通过
+                logger.info(result['message'])
+                return result
+
+            # 计算差额和容差
+            difference = abs(calculated_total - reported_total)
+            tolerance = max(abs(calculated_total), abs(reported_total)) * tolerance_rate
+            passed = difference <= tolerance
+
+            deduction_info = ""
+            if result['deduction_items']:
+                deduction_count = len(result['deduction_items'])
+                deduction_total = sum(item['value'] for item in result['deduction_items'])
+                deduction_info = f", 其中减项{deduction_count}个(合计{deduction_total:,.2f})"
+
+            result.update({
+                'passed': passed,
+                'calculated': float(calculated_total),
+                'reported': float(reported_total),
+                'difference': float(difference),
+                'tolerance': float(tolerance),
+                'item_count': item_count,
+                'message': f"{subtotal_name}验证{'通过' if passed else '失败'}：计算值={calculated_total:,.2f}（{item_count}项{deduction_info}）, 报表值={reported_total:,.2f}, 差额={difference:,.2f}"
+            })
+
+            if passed:
+                logger.info(result['message'])
+            else:
+                logger.warning(result['message'])
+
+        except Exception as e:
+            result['message'] = f"{subtotal_name}验证出错: {str(e)}"
+            logger.error(result['message'], exc_info=True)
+
+        return result
 
     def _get_numeric_value(self, value_str: Optional[str]) -> Optional[float]:
         """
