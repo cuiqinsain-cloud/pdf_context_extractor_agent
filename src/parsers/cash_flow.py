@@ -5,18 +5,19 @@
 import re
 from typing import Dict, List, Optional, Any, Tuple
 import logging
-from .column_analyzer import ColumnAnalyzer, ColumnType
+from .base_statement_parser import BaseStatementParser
+from .column_analyzer import ColumnType
 
 logger = logging.getLogger(__name__)
 
 
-class CashFlowParser:
+class CashFlowParser(BaseStatementParser):
     """合并现金流量表解析器"""
 
     def __init__(self):
         """初始化解析器"""
-        # 初始化列结构分析器
-        self.column_analyzer = ColumnAnalyzer()
+        # 初始化基类
+        super().__init__('cash_flow')
 
         # 经营活动现金流量项目模式
         self.operating_patterns = {
@@ -83,8 +84,8 @@ class CashFlowParser:
         """
         logger.info("开始解析合并现金流量表...")
 
-        # 重置ColumnAnalyzer缓存
-        self.column_analyzer.reset_cache()
+        # 重置缓存
+        self.reset_cache()
 
         # 初始化结果结构
         result = {
@@ -98,309 +99,105 @@ class CashFlowParser:
                 'matched_items': 0,
                 'unmatched_items': []
             },
-            'ordered_items': []
+            'ordered_items': [],
+            'structure_info': {}  # 结构识别信息
         }
 
         if not table_data:
             logger.warning("表格数据为空")
             return result
 
-        # 第一步：查找开始标志"一、经营活动产生的现金流量："
-        # 注意：可能有多个开始标志（母公司+合并），需要找到合并报表的标志
-        start_parsing = False
-        start_row_idx = -1
-        all_start_positions = []
+        # ========== 步骤1: 识别报表结构 ==========
+        logger.info("步骤1: 识别报表结构...")
+        structure_result = self.identify_statement_structure(table_data)
 
-        for row_idx, row in enumerate(table_data):
-            if not row or len(row) == 0:
-                continue
+        # 保存结构识别信息
+        result['structure_info'] = {
+            'is_valid': structure_result['is_valid'],
+            'confidence': structure_result['confidence'],
+            'key_positions': structure_result['key_positions'],
+            'header_row': structure_result['header_row'],
+            'data_range': (structure_result['start_row'], structure_result['end_row'])
+        }
 
-            # 检查第0列或第1列是否包含"一、经营活动产生的现金流量："
-            # 因为有些公司的项目名称在第1列
-            for col_idx in [0, 1]:
-                if len(row) > col_idx and row[col_idx]:
-                    cell_text = row[col_idx].strip()
-                    if re.search(r'^一、经营活动产生的现金流\s*量：?$', cell_text):
-                        all_start_positions.append(row_idx)
-                        logger.info(f"找到现金流量表开始标志于第{row_idx}行第{col_idx}列")
-                        break
-
-        if not all_start_positions:
-            logger.warning("未找到'一、经营活动产生的现金流量：'开始标志，无法解析")
+        if not structure_result['is_valid']:
+            logger.warning(f"结构识别失败，置信度: {structure_result['confidence']:.2%}")
+            logger.warning(f"缺失的关键结构: {structure_result['missing_keys']}")
             return result
-
-        # 如果有多个开始标志，需要判断哪个是合并报表
-        # 策略1：检查开始标志之前的表头，如果包含"母公司"则跳过
-        # 策略2：检查开始标志之后的数据列数稳定性，选择更稳定的
-        best_start_idx = None
-        best_score = -1
-
-        for start_idx in all_start_positions:
-            score = 0
-
-            # 检查1：开始标志之前是否有"母公司"关键字
-            has_parent_keyword = False
-            for check_idx in range(max(0, start_idx - 10), start_idx):
-                if check_idx < len(table_data):
-                    row_text = ' '.join([str(cell) for cell in table_data[check_idx] if cell])
-                    if '母公司' in row_text:
-                        has_parent_keyword = True
-                        score -= 100  # 大幅降低分数
-                        logger.info(f"第{start_idx}行之前发现'母公司'关键字，降低分数")
-                        break
-
-            # 检查2：开始标志之后的列数稳定性
-            # 检查后续20行，计算列数的一致性
-            col_counts = []
-            for check_idx in range(start_idx, min(start_idx + 20, len(table_data))):
-                if check_idx < len(table_data) and table_data[check_idx]:
-                    col_counts.append(len(table_data[check_idx]))
-
-            if col_counts:
-                # 计算最常见的列数
-                from collections import Counter
-                most_common_col = Counter(col_counts).most_common(1)[0]
-                col_stability = most_common_col[1] / len(col_counts)  # 稳定性比例
-                score += col_stability * 100  # 稳定性越高，分数越高
-                logger.info(f"第{start_idx}行的列数稳定性: {col_stability:.2f} (最常见列数={most_common_col[0]})")
-
-            # 检查3：位置越靠后，分数越高（合并报表通常在母公司报表之后）
-            score += start_idx * 0.1
-
-            logger.info(f"第{start_idx}行的总分: {score:.2f}")
-
-            if score > best_score:
-                best_score = score
-                best_start_idx = start_idx
-
-        if best_start_idx is not None:
-            start_parsing = True
-            start_row_idx = best_start_idx
-            logger.info(f"选择第{start_row_idx}行作为合并现金流量表的开始标志（分数={best_score:.2f}）")
         else:
-            # 如果没有找到合适的，使用最后一个
-            start_parsing = True
-            start_row_idx = all_start_positions[-1]
-            logger.warning(f"未找到明确的合并报表标志，使用最后一个开始标志（第{start_row_idx}行）")
+            logger.info(f"结构识别成功，置信度: {structure_result['confidence']:.2%}")
+            logger.info(f"数据范围: 第{structure_result['start_row']}行 到 第{structure_result['end_row']}行")
 
-        # 第二步：识别表头结构（在开始标志之前的最近10行中查找）
-        # 这样可以避免选择到更前面的母公司报表的表头
-        table_data_before_start = table_data[max(0, start_row_idx - 10):start_row_idx]
-        header_info = self._identify_header_structure(table_data_before_start)
-        logger.info(f"识别到的表头结构: {header_info}")
+        # ========== 步骤2: 提取有效数据范围 ==========
+        logger.info("步骤2: 提取有效数据范围...")
+        data_to_parse = self.extract_statement_data(table_data, structure_result)
+        row_offset = structure_result['start_row']
 
-        # 第三步：逐行解析数据（从开始标志开始）
-        for row_idx, row in enumerate(table_data[start_row_idx:], start=start_row_idx):
+        # ========== 步骤3: 获取表头信息 ==========
+        logger.info("步骤3: 分析表头结构...")
+        header_info = self.get_header_info(table_data, structure_result)
+
+        # ========== 步骤4: 逐行解析数据 ==========
+        logger.info("步骤4: 逐行解析数据...")
+        for row_idx, row in enumerate(data_to_parse):
             if not row or len(row) == 0:
                 continue
 
-            # 获取项目名称（使用识别到的列索引）
-            item_name_col = header_info.get('item_name_col', 0)
-            if len(row) <= item_name_col:
-                continue
-
-            item_name = row[item_name_col].strip() if row[item_name_col] else ""
-            item_name = item_name.replace('\n', ' ').replace('\r', '').strip()
+            # 使用基类方法获取项目名称（支持第0列和第1列）
+            item_name = self.get_item_name_from_row(row, header_info)
 
             if not item_name:
                 continue
 
-            # 提取数值数据
-            values = self._extract_values_from_row(row, header_info)
+            # 使用基类方法提取数值
+            values = self.extract_values_from_row(row, header_info)
 
             # 分类匹配项目
             matched = False
-            matched_item_name = None
 
             # 匹配经营活动项目
             if not matched:
-                matched, matched_name = self._match_and_store_item_with_name(
+                matched, _ = self._match_and_store_item_with_name(
                     item_name, values, self.operating_patterns,
                     result['operating_activities'], result, 'operating_activities'
                 )
-                if matched:
-                    matched_item_name = matched_name
 
             # 匹配投资活动项目
             if not matched:
-                matched, matched_name = self._match_and_store_item_with_name(
+                matched, _ = self._match_and_store_item_with_name(
                     item_name, values, self.investing_patterns,
                     result['investing_activities'], result, 'investing_activities'
                 )
-                if matched:
-                    matched_item_name = matched_name
 
             # 匹配筹资活动项目
             if not matched:
-                matched, matched_name = self._match_and_store_item_with_name(
+                matched, _ = self._match_and_store_item_with_name(
                     item_name, values, self.financing_patterns,
                     result['financing_activities'], result, 'financing_activities'
                 )
-                if matched:
-                    matched_item_name = matched_name
 
             # 匹配其他项目
             if not matched:
-                matched, matched_name = self._match_and_store_item_with_name(
+                matched, _ = self._match_and_store_item_with_name(
                     item_name, values, self.other_patterns,
                     result['other_items'], result, 'other_items'
                 )
-                if matched:
-                    matched_item_name = matched_name
-
-            # 检测现金流量表结束标志：六、期末现金及现金等价物余额
-            # 这是合并现金流量表的最后一行，之后可能是母公司报表或其他内容
-            is_ending = re.search(r'^六、期末现金及现金等价物余\s*额$', item_name)
 
             # 记录匹配结果
             if matched:
                 result['parsing_info']['matched_items'] += 1
             else:
                 result['parsing_info']['unmatched_items'].append({
-                    'row_index': row_idx,
+                    'row_index': row_idx + row_offset,
                     'item_name': item_name,
                     'values': values
                 })
-
-            # 如果是结束标志，停止解析（已经处理完这一行）
-            if is_ending:
-                logger.info(f"检测到合并现金流量表结束标志于第{row_idx}行：{item_name}，停止解析")
-                break
 
         logger.info(f"解析完成，匹配项目: {result['parsing_info']['matched_items']}, "
                    f"未匹配项目: {len(result['parsing_info']['unmatched_items'])}")
 
         return result
 
-    def _identify_header_structure(self, table_data: List[List[str]]) -> Dict[str, int]:
-        """
-        识别表头结构，确定各列的含义
-        使用 ColumnAnalyzer 进行动态列结构识别
-
-        Args:
-            table_data (List[List[str]]): 表格数据
-
-        Returns:
-            Dict[str, int]: 列索引映射
-        """
-        header_info = {
-            'item_name_col': 0,
-            'current_period_col': None,
-            'previous_period_col': None,
-            'note_col': None
-        }
-
-        if not table_data:
-            return header_info
-
-        # 使用 ColumnAnalyzer 分析前几行，找到表头
-        best_header_info = None
-        best_header_score = 0
-
-        for row_idx, row in enumerate(table_data[:50]):
-            if not row or len(row) < 2:
-                continue
-
-            # 使用 ColumnAnalyzer 分析行结构
-            column_map = self.column_analyzer.analyze_row_structure(row, use_cache=False)
-
-            # 如果成功识别出至少2个列类型，认为找到了表头
-            has_current = ColumnType.CURRENT_PERIOD in column_map
-            has_previous = ColumnType.PREVIOUS_PERIOD in column_map
-
-            if has_current and has_previous:
-                # 计算表头的质量分数
-                score = 0
-
-                # 检查是否包含"年度"关键字
-                row_str = ' '.join([str(cell) for cell in row if cell])
-                if '年度' in row_str:
-                    score += 10
-
-                # 检查是否包含"项目"关键字
-                if '项目' in row_str:
-                    score += 5
-
-                # 行号越靠后，分数越高
-                score += row_idx * 0.1
-
-                if score > best_header_score:
-                    best_header_score = score
-                    best_header_info = {
-                        'item_name_col': column_map.get(ColumnType.ITEM_NAME, 0),
-                        'current_period_col': column_map.get(ColumnType.CURRENT_PERIOD),
-                        'previous_period_col': column_map.get(ColumnType.PREVIOUS_PERIOD),
-                        'note_col': column_map.get(ColumnType.NOTE)
-                    }
-                    logger.info(f"在第{row_idx}行找到候选表头（分数={score:.1f}）: {best_header_info}")
-
-        if best_header_info:
-            header_info = best_header_info
-            logger.info(f"最终选择的表头结构: {header_info}")
-        elif header_info['current_period_col'] is None:
-            logger.warning("未能识别表头结构，将使用默认列索引")
-
-        return header_info
-
-    def _extract_values_from_row(self, row: List[str], header_info: Dict[str, int]) -> Dict[str, str]:
-        """
-        从行数据中提取数值
-        使用 ColumnAnalyzer 进行动态列结构识别
-
-        Args:
-            row (List[str]): 行数据
-            header_info (Dict[str, int]): 表头信息
-
-        Returns:
-            Dict[str, str]: 提取的数值
-        """
-        values = {}
-
-        # 检查行的列数是否与表头匹配
-        row_col_count = len(row)
-        expected_col_count = max(
-            header_info.get('current_period_col', 0) or 0,
-            header_info.get('previous_period_col', 0) or 0
-        ) + 1
-
-        # 如果列数不匹配或没有表头信息，使用 ColumnAnalyzer 动态分析
-        if (header_info['current_period_col'] is None or
-            row_col_count < expected_col_count or
-            abs(row_col_count - expected_col_count) > 1):
-
-            column_map = self.column_analyzer.analyze_row_structure(row, use_cache=False)
-            extracted_values = self.column_analyzer.extract_values_from_row(row, column_map)
-
-            if 'current_period' in extracted_values:
-                values['current_period'] = extracted_values['current_period']
-            if 'previous_period' in extracted_values:
-                values['previous_period'] = extracted_values['previous_period']
-            if 'note' in extracted_values:
-                values['note'] = extracted_values['note']
-
-            return values
-
-        # 使用标准的列索引提取
-        column_map = {}
-        if header_info.get('item_name_col') is not None:
-            column_map[ColumnType.ITEM_NAME] = header_info['item_name_col']
-        if header_info.get('current_period_col') is not None:
-            column_map[ColumnType.CURRENT_PERIOD] = header_info['current_period_col']
-        if header_info.get('previous_period_col') is not None:
-            column_map[ColumnType.PREVIOUS_PERIOD] = header_info['previous_period_col']
-        if header_info.get('note_col') is not None:
-            column_map[ColumnType.NOTE] = header_info['note_col']
-
-        extracted_values = self.column_analyzer.extract_values_from_row(row, column_map)
-
-        if 'current_period' in extracted_values:
-            values['current_period'] = extracted_values['current_period']
-        if 'previous_period' in extracted_values:
-            values['previous_period'] = extracted_values['previous_period']
-        if 'note' in extracted_values:
-            values['note'] = extracted_values['note']
-
-        return values
 
     def _match_and_store_item_with_name(self, item_name: str, values: Dict[str, str],
                             patterns: Dict[str, List[str]], storage: Dict[str, Dict],
