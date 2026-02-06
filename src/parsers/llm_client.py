@@ -46,6 +46,57 @@ class LLMClient:
 
         logger.info(f"LLM 客户端初始化: provider={self.provider}, model={self.model}")
 
+    def call_llm(self, user_prompt: str, system_prompt: Optional[str] = None) -> Dict[str, Any]:
+        """
+        通用 LLM 调用方法
+
+        Args:
+            user_prompt: 用户提示词
+            system_prompt: 系统提示词（可选，如果不提供则使用默认的）
+
+        Returns:
+            Dict[str, Any]: LLM 响应结果
+                {
+                    'success': bool,
+                    'content': str,  # LLM 返回的文本内容
+                    'error': str  # 如果失败
+                }
+        """
+        if not self.api_key:
+            logger.error("API key 未设置，无法调用 LLM")
+            return {
+                'success': False,
+                'error': 'API key not set',
+                'content': ''
+            }
+
+        # 使用提供的系统提示词，或使用默认的
+        sys_prompt = system_prompt if system_prompt else self.system_prompt
+
+        # 根据 provider 类型调用不同的 API
+        try:
+            if self.provider == ProviderType.ANTHROPIC.value:
+                result = self._call_anthropic_api_generic(user_prompt, sys_prompt)
+            elif self.provider == ProviderType.CHAITIN.value:
+                result = self._call_openai_compatible_api_generic(user_prompt, sys_prompt)
+            elif self.provider == ProviderType.OPENROUTER.value:
+                result = self._call_openai_compatible_api_generic(user_prompt, sys_prompt)
+            elif self.provider == ProviderType.OLLAMA.value:
+                result = self._call_ollama_api_generic(user_prompt, sys_prompt)
+            else:
+                # 默认使用 OpenAI 兼容格式
+                result = self._call_openai_compatible_api_generic(user_prompt, sys_prompt)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"LLM 调用失败: {e}", exc_info=True)
+            return {
+                'success': False,
+                'error': str(e),
+                'content': ''
+            }
+
     def analyze_header(self, header_row: List[str]) -> Dict[str, Any]:
         """
         使用 LLM 分析表头
@@ -98,6 +149,143 @@ class LLMClient:
                 'error': str(e),
                 'column_map': {},
                 'confidence': 0.0
+            }
+
+    def _call_anthropic_api_generic(self, user_prompt: str, system_prompt: str) -> Dict[str, Any]:
+        """
+        调用 Anthropic Claude API（通用版本）
+
+        Args:
+            user_prompt: 用户提示词
+            system_prompt: 系统提示词
+
+        Returns:
+            Dict[str, Any]: 响应结果
+        """
+        url = f"{self.base_url}/v1/messages"
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            **self.default_headers
+        }
+
+        payload = {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "system": system_prompt,
+            "messages": [
+                {"role": "user", "content": user_prompt}
+            ]
+        }
+
+        response = self._make_request(url, headers, payload)
+
+        if response['success']:
+            # 解析 Anthropic 响应格式
+            content = response['data']['content'][0]['text']
+            return {
+                'success': True,
+                'content': content
+            }
+        else:
+            return {
+                'success': False,
+                'error': response.get('error', 'Unknown error'),
+                'content': ''
+            }
+
+    def _call_openai_compatible_api_generic(self, user_prompt: str, system_prompt: str) -> Dict[str, Any]:
+        """
+        调用 OpenAI 兼容 API（通用版本）
+
+        Args:
+            user_prompt: 用户提示词
+            system_prompt: 系统提示词
+
+        Returns:
+            Dict[str, Any]: 响应结果
+        """
+        url = f"{self.base_url}/v1/chat/completions"
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            **self.default_headers
+        }
+
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature
+        }
+
+        response = self._make_request(url, headers, payload)
+
+        if response['success']:
+            # 解析 OpenAI 兼容响应格式
+            content = response['data']['choices'][0]['message']['content']
+            return {
+                'success': True,
+                'content': content
+            }
+        else:
+            return {
+                'success': False,
+                'error': response.get('error', 'Unknown error'),
+                'content': ''
+            }
+
+    def _call_ollama_api_generic(self, user_prompt: str, system_prompt: str) -> Dict[str, Any]:
+        """
+        调用 Ollama API（通用版本）
+
+        Args:
+            user_prompt: 用户提示词
+            system_prompt: 系统提示词
+
+        Returns:
+            Dict[str, Any]: 响应结果
+        """
+        url = f"{self.base_url}/api/generate"
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        # Ollama 使用不同的格式
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        payload = {
+            "model": self.model,
+            "prompt": full_prompt,
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens
+            }
+        }
+
+        response = self._make_request(url, headers, payload)
+
+        if response['success']:
+            # 解析 Ollama 响应格式
+            content = response['data']['response']
+            return {
+                'success': True,
+                'content': content
+            }
+        else:
+            return {
+                'success': False,
+                'error': response.get('error', 'Unknown error'),
+                'content': ''
             }
 
     def _call_anthropic_api(self, user_prompt: str) -> Dict[str, Any]:

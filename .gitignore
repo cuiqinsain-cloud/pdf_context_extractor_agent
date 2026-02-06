@@ -21,6 +21,7 @@ Thumbs.db
 
 # Project specific
 output/*.xlsx
+output/*.json
 logs/*.log
 logs/*.json
 config/llm_config.json
