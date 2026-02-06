@@ -13,7 +13,7 @@
 **支持的报表类型**：
 - ✅ 合并资产负债表
 - ✅ 合并利润表
-- 🚧 合并现金流量表（开发中）
+- ✅ 合并现金流量表
 
 **核心特性**：
 - ✅ 动态列结构识别 - 自动适应不同格式
@@ -21,8 +21,9 @@
 - ✅ 跨页支持 - 自动处理跨页表格
 - ✅ 三层级平衡性验证 - 细粒度数据验证
 - ✅ Excel导出 - 一键导出结构化数据
+- ✅ 财务科目标准化 - 使用标准中文财务科目名称
 
-**当前版本**: v1.2.0-alpha
+**当前版本**: v1.3.0
 
 ## 🚀 快速开始
 
@@ -90,7 +91,7 @@ with PDFReader('path/to/annual_report.pdf') as pdf_reader:
     result = parser.parse_income_statement(merged_data)
 ```
 
-#### 解析现金流量表（开发中）
+#### 解析现金流量表
 
 ```python
 from src.pdf_reader import PDFReader
@@ -112,7 +113,26 @@ with PDFReader('path/to/annual_report.pdf') as pdf_reader:
     result = parser.parse_cash_flow(merged_data)
 ```
 
-### 3. 批量处理
+### 3. 批量导出（推荐）
+
+```bash
+# 激活虚拟环境
+source venv/bin/activate
+
+# 一次性导出所有公司的三张报表
+python tools/export_all_statements.py
+```
+
+**输出**：
+- 每个公司生成一个Excel文件
+- 包含3个工作表：资产负债表、利润表、现金流量表
+- 使用标准中文财务科目名称（货币资金、营业收入、经营活动现金流量净额等）
+- 文件保存在 `output/` 目录
+- 文件命名：`{公司名}_三表合一_{时间戳}.xlsx`
+
+### 4. 单独导出
+
+如果只需要导出特定报表：
 
 ```bash
 # 激活虚拟环境
@@ -178,7 +198,7 @@ python tests/test_real_pdf.py
 # 真实PDF测试 - 利润表
 python tests/test_income_statement.py
 
-# 真实PDF测试 - 现金流量表（开发中）
+# 真实PDF测试 - 现金流量表
 python tests/test_cash_flow.py
 
 # LLM集成测试

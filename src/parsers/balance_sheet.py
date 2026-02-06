@@ -404,8 +404,8 @@ class BalanceSheetParser(BaseStatementParser):
             })
             return True
 
-        # 所有者权益合计
-        elif re.search(r'所有者权益（或股东权益）?\s*合\s*计|股东权益\s*合\s*计', item_name):
+        # 所有者权益合计（排除"归属于母公司所有者权益合计"）
+        elif re.search(r'^所有者权益.*?合\s*计$|^股东权益\s*合\s*计$', item_name):
             result['equity']['equity_total'] = item_data
             result['ordered_items'].append({
                 'section': 'equity.equity_total',

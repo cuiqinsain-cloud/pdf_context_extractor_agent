@@ -99,24 +99,56 @@ result = analyzer.analyze_row_structure(header_row)
 
 ## 二、数据导出
 
-### 2.1 Excel导出
+### 2.1 综合导出工具（推荐）
 
 **功能描述**：
-- 批量处理多个PDF
-- 导出结构化Excel文件
-- 包含汇总统计和详细数据
+- 一次性导出三张报表（资产负债表、利润表、现金流量表）
+- 批量处理多个公司
+- 使用标准中文财务科目名称
+- 自动生成带时间戳的文件
 
 **使用方法**：
 ```bash
 # 激活虚拟环境
 source venv/bin/activate
 
-# 运行导出工具
-python tools/export_to_excel.py
+# 运行综合导出工具
+python tools/export_all_statements.py
 ```
 
 **输出文件**：
-- 位置：`output/balance_sheet_results_*.xlsx`
+- 位置：`output/{公司名}_三表合一_{时间戳}.xlsx`
+- 结构：每个公司一个Excel文件，包含3个工作表
+  - 资产负债表
+  - 利润表
+  - 现金流量表
+- 列结构：公司、类别、项目、本期金额、上期金额、附注
+
+**财务科目标准化**：
+- 资产负债表：货币资金、应收账款、固定资产、长期股权投资等
+- 利润表：营业收入、营业成本、销售费用、管理费用、净利润等
+- 现金流量表：销售商品、提供劳务收到的现金、经营活动产生的现金流量净额等
+
+### 2.2 单独导出工具
+
+**功能描述**：
+- 单独导出特定报表
+- 适用于只需要某一张报表的场景
+
+**使用方法**：
+```bash
+# 激活虚拟环境
+source venv/bin/activate
+
+# 导出资产负债表
+python tools/export_to_excel.py
+
+# 导出利润表
+python tools/export_income_statement.py
+```
+
+**输出文件**：
+- 位置：`output/balance_sheet_results_*.xlsx` 或 `output/income_statement_results_*.xlsx`
 - 内容：
   - 汇总统计表
   - 各公司完整数据
@@ -297,9 +329,12 @@ self.column_keywords = {
 
 ### 8.1 当前限制
 
-- ✅ 仅支持合并资产负债表
+- ✅ 支持合并资产负债表
+- ✅ 支持合并利润表
+- ✅ 支持合并现金流量表
 - ⚠️ 部分特殊格式需要LLM辅助
 - ⚠️ 不支持图片格式的表格
+- ⚠️ 不支持所有者权益变动表（计划中）
 
 ### 8.2 使用注意事项
 
@@ -310,4 +345,4 @@ self.column_keywords = {
 
 ---
 
-**最后更新**: 2026-02-05
+**最后更新**: 2026-02-06
