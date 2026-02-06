@@ -207,6 +207,14 @@ class ColumnAnalyzer:
         if re.search(r'[一二三四五六七八九十]+、\d+', text):
             return True
 
+        # 匹配"七(1)"、"六(2)"等格式（括号格式）
+        if re.search(r'[一二三四五六七八九十]+\(\d+\)', text):
+            return True
+
+        # 匹配"七、(1)"等混合格式
+        if re.search(r'[一二三四五六七八九十]+、\(\d+\)', text):
+            return True
+
         # 匹配纯数字（如"1"、"2"）
         if re.match(r'^\d+$', text) and len(text) <= 3:
             return True
