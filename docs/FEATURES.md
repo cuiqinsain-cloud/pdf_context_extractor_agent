@@ -45,12 +45,14 @@ header_row = ['项目', '附注', '期末', '期初']
 column_map = analyzer.analyze_row_structure(header_row)
 ```
 
-### 1.3 资产负债表解析
+### 1.3 财务报表解析
+
+#### 资产负债表解析
 
 **功能描述**：
 - 解析合并资产负债表
 - 自动分类资产、负债、所有者权益
-- 数据验证和平衡性检查
+- 三层级数据验证和平衡性检查
 
 **使用方法**：
 ```python
@@ -65,7 +67,37 @@ liabilities = result['liabilities']
 equity = result['equity']
 ```
 
-### 1.4 LLM智能识别（新功能）
+#### 利润表解析
+
+**功能描述**：
+- 解析合并利润表
+- 自动分类营业收入、成本、利润等
+- 三层级验证机制
+
+**使用方法**：
+```python
+from src.parsers.income_statement import IncomeStatementParser
+
+parser = IncomeStatementParser()
+result = parser.parse_income_statement(table_data)
+```
+
+#### 现金流量表解析
+
+**功能描述**：
+- 解析合并现金流量表
+- 自动分类经营/投资/筹资活动
+- 三层级验证机制
+
+**使用方法**：
+```python
+from src.parsers.cash_flow import CashFlowParser
+
+parser = CashFlowParser()
+result = parser.parse_cash_flow(table_data)
+```
+
+### 1.4 LLM智能识别
 
 **功能描述**：
 - 规则匹配 + LLM智能识别的混合方案
@@ -93,13 +125,130 @@ result = analyzer.analyze_row_structure(header_row)
 **配置要求**：
 - 配置文件：`config/llm_config.json`
 - 环境变量：`export LLM_API_KEY='your_key'`
-- 详见：[LLM配置指南](guides/llm_config.md)
 
 ---
 
-## 二、数据导出
+## 二、财务报表注释提取（批量处理）
 
-### 2.1 综合导出工具（推荐）
+### 2.1 批量提取功能
+
+**功能描述**：
+- 智能提取财务报表注释章节的标题和内容
+- 批量处理多页文档，性能提升2.2倍
+- 自动提取文本、表格和层级结构
+- 成本降低80%（LLM调用减少）
+
+**核心特性**：
+- ✅ 标题识别（一级/二级标题）
+- ✅ 内容提取（文本+表格）
+- ✅ 层级结构（父子关系）
+- ✅ 位置感知表格分配
+- ✅ 批量处理优化（5页/批次）
+
+### 2.2 使用方法
+
+#### 命令行方式（推荐）
+
+```bash
+# 激活虚拟环境
+source venv/bin/activate
+
+# 提取福耀玻璃年报注释（125-174页）
+python scripts/extract_full_notes.py \
+    data/福耀玻璃2024年年度报告.pdf \
+    125 174
+
+# 自定义输出路径
+python scripts/extract_full_notes.py \
+    data/report.pdf 125 174 \
+    -o output/notes_full.json
+
+# 自定义批次大小
+python scripts/extract_full_notes.py \
+    data/report.pdf 125 174 \
+    -b 3  # 使用3页/批次
+```
+
+#### Python API方式
+
+```python
+from src.parsers.batch_notes_extractor import BatchNotesExtractor
+from src.parsers.config_loader import ConfigLoader
+
+# 加载配置
+config_loader = ConfigLoader()
+config = config_loader.load_config()
+llm_config = config['llm_api']
+
+# 创建批量提取器
+extractor = BatchNotesExtractor(llm_config, batch_size=5)
+
+# 批量提取
+with PDFReader(pdf_path) as pdf_reader:
+    pages = pdf_reader.get_pages((125, 174))
+    result = extractor.extract_notes_from_pages_batch(
+        pages,
+        start_page_num=125
+    )
+
+# 查看结果
+print(f"提取注释数: {result['total_notes']}")
+```
+
+### 2.3 输出格式
+
+**JSON结构**：
+```json
+{
+  "success": true,
+  "notes": [
+    {
+      "number": "1",
+      "level": 1,
+      "title": "货币资金",
+      "full_title": "1、 货币资金",
+      "page_num": 125,
+      "content": {
+        "text": "文本内容...",
+        "tables": [[["列1", "列2"], ["数据1", "数据2"]]],
+        "table_count": 1
+      },
+      "has_table": true,
+      "is_complete": true
+    }
+  ],
+  "total_pages": 50,
+  "total_notes": 120,
+  "errors": []
+}
+```
+
+### 2.4 性能指标
+
+| 指标 | 逐页处理 | 批量处理 | 提升 |
+|------|----------|----------|------|
+| 处理速度 | 60秒/页 | 27.6秒/页 | **2.2x** |
+| LLM调用（50页） | 50次 | 10次 | **5x** |
+| API成本 | 基准 | -80% | **节省80%** |
+| 成功率 | 高 | 100% | 稳定 |
+
+**推荐配置**: 5页/批次（默认），性能和稳定性最佳平衡
+
+### 2.5 批次大小选择
+
+| 批次大小 | 优点 | 缺点 | 适用场景 |
+|----------|------|------|----------|
+| 3页 | 稳定性最高 | 速度较慢 | 网络不稳定时 |
+| **5页** | **平衡最优** | - | **推荐默认** |
+| 10页 | 速度最快 | 可能超时 | 网络极好时 |
+
+---
+
+## 三、Excel导出功能
+
+### 3.1 财务报表Excel导出
+
+#### 综合导出工具（推荐）
 
 **功能描述**：
 - 一次性导出三张报表（资产负债表、利润表、现金流量表）
@@ -129,17 +278,10 @@ python tools/export_all_statements.py
 - 利润表：营业收入、营业成本、销售费用、管理费用、净利润等
 - 现金流量表：销售商品、提供劳务收到的现金、经营活动产生的现金流量净额等
 
-### 2.2 单独导出工具
-
-**功能描述**：
-- 单独导出特定报表
-- 适用于只需要某一张报表的场景
+#### 单独导出工具
 
 **使用方法**：
 ```bash
-# 激活虚拟环境
-source venv/bin/activate
-
 # 导出资产负债表
 python tools/export_to_excel.py
 
@@ -147,18 +289,51 @@ python tools/export_to_excel.py
 python tools/export_income_statement.py
 ```
 
-**输出文件**：
-- 位置：`output/balance_sheet_results_*.xlsx` 或 `output/income_statement_results_*.xlsx`
-- 内容：
-  - 汇总统计表
-  - 各公司完整数据
-  - 未匹配项目汇总
+### 3.2 注释Excel导出
+
+**功能描述**：
+- 将批量提取的注释数据导出为格式化Excel文件
+- 目录sheet：一级标题概览
+- 内容sheet：每个一级标题独立sheet
+- 完整格式化（颜色、字体、边框、对齐）
+
+**使用方法**：
+```bash
+# 导出注释到Excel
+python tools/export_notes_to_excel.py \
+    output/notes_full.json \
+    -c 福耀玻璃 \
+    -o output/福耀玻璃_财务报表注释.xlsx
+```
+
+**Excel文件结构**：
+
+#### Sheet 1: 目录
+- 所有一级标题概览
+- 列：序号、标题、页码、子项数量、表格数量、工作表名称
+- 特性：冻结首行、自动筛选、斑马纹样式
+
+#### Sheet 2-N: 内容工作表
+- 命名规则：`{序号}_{标题}`（如"1_货币资金"）
+- 区域1：标题信息区（注释标题、页码、层级、表格数量）
+- 区域2：内容区（层级、标题、页码、内容）
+- 区域3：表格区（格式化的财务表格）
+
+**样式设计**：
+- 字体：微软雅黑
+- 颜色方案：蓝色主题（目录）、绿色主题（内容）
+- 特性：冻结窗格、自动换行、对齐优化
+
+**性能指标**：
+- 处理速度：~5秒/10个注释
+- 文件大小：~20KB/10个注释
+- 无限制支持任意数量的注释和表格
 
 ---
 
-## 三、支持的表头格式
+## 四、支持的表头格式
 
-### 3.1 标准格式
+### 4.1 标准格式
 
 | 格式类型 | 示例 | 支持状态 |
 |---------|------|---------|
@@ -168,7 +343,7 @@ python tools/export_income_statement.py
 | 日期格式 | 2024年12月31日 | ✅ |
 | 带空格日期 | 2024 年12月 31日 | ✅ (LLM) |
 
-### 3.2 列数支持
+### 4.2 列数支持
 
 - ✅ 3列格式：项目、期末、期初
 - ✅ 4列格式：项目、附注、期末、期初
@@ -177,9 +352,9 @@ python tools/export_income_statement.py
 
 ---
 
-## 四、数据验证
+## 五、数据验证
 
-### 4.1 平衡性检查
+### 5.1 平衡性检查
 
 **验证规则**：
 ```
@@ -195,65 +370,12 @@ if validation['balance_check']:
     print("✓ 平衡性检查通过")
 ```
 
-### 4.2 完整性检查
+### 5.2 完整性检查
 
 **检查项目**：
 - 必填项目是否存在
 - 数据格式是否正确
 - 未匹配项目比例
-
----
-
-## 五、测试功能
-
-### 5.1 单元测试
-
-**测试内容**：
-- ColumnAnalyzer 功能测试
-- 各种表头格式测试
-- 缓存机制测试
-
-**运行方法**：
-```bash
-python tests/test_column_analyzer.py
-```
-
-### 5.2 集成测试
-
-**测试内容**：
-- 完整流程测试
-- 跨页处理测试
-- 多格式兼容性测试
-
-**运行方法**：
-```bash
-python tests/test_integration.py
-```
-
-### 5.3 真实PDF测试
-
-**测试数据**：
-- 福耀玻璃 2024年报
-- 海尔智家 2024年报
-- 海天味业 2024年报
-- 金山办公 2024年报
-
-**运行方法**：
-```bash
-python tests/test_real_pdf.py
-```
-
-### 5.4 LLM集成测试
-
-**测试内容**：
-- LLM API连接测试
-- 混合识别流程测试
-- 用户选择界面测试
-
-**运行方法**：
-```bash
-python tests/test_llm_integration.py
-```
 
 ---
 
@@ -270,12 +392,13 @@ python tests/test_llm_integration.py
 - 大部分行只需检查列数
 - 避免重复的复杂分析
 
-### 6.2 批量处理
+### 6.2 批量处理优化
 
 **特性**：
-- 支持批量处理多个PDF
-- 自动生成汇总报告
-- 并行处理（计划中）
+- 支持批量处理多页文档
+- 自动分批调用LLM
+- 结果自动合并
+- 错误处理和重试机制
 
 ---
 
@@ -285,17 +408,17 @@ python tests/test_llm_integration.py
 
 **步骤**：
 1. 创建新的解析器类
-2. 继承或参考 `BalanceSheetParser`
+2. 继承或参考现有解析器
 3. 使用 `ColumnAnalyzer` 进行列识别
 4. 添加测试用例
 
 **示例**：
 ```python
-class IncomeStatementParser:
+class NewStatementParser:
     def __init__(self):
         self.column_analyzer = ColumnAnalyzer()
 
-    def parse_income_statement(self, table_data):
+    def parse_statement(self, table_data):
         # 实现解析逻辑
         pass
 ```
@@ -314,24 +437,16 @@ self.column_keywords = {
 }
 ```
 
-### 7.3 添加新的LLM Provider
-
-**位置**：`src/parsers/llm_client.py`
-
-**方法**：
-1. 在 `ProviderType` 枚举中添加新类型
-2. 实现对应的 API 调用方法
-3. 更新配置文件模板
-
 ---
 
 ## 八、限制和注意事项
 
-### 8.1 当前限制
+### 8.1 当前支持
 
-- ✅ 支持合并资产负债表
-- ✅ 支持合并利润表
-- ✅ 支持合并现金流量表
+- ✅ 合并资产负债表
+- ✅ 合并利润表
+- ✅ 合并现金流量表
+- ✅ 财务报表注释（标题+内容+表格）
 - ⚠️ 部分特殊格式需要LLM辅助
 - ⚠️ 不支持图片格式的表格
 - ⚠️ 不支持所有者权益变动表（计划中）
@@ -342,7 +457,8 @@ self.column_keywords = {
 2. **PDF质量**：PDF需要是文本格式，不能是扫描件
 3. **页码范围**：需要准确指定表格所在页码
 4. **LLM配置**：使用LLM功能需要正确配置API
+5. **Excel限制**：Sheet名称最大31字符，最多255个sheet
 
 ---
 
-**最后更新**: 2026-02-06
+**最后更新**: 2026-02-10 | **版本**: v1.5.0

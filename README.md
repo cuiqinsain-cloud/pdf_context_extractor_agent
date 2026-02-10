@@ -26,7 +26,7 @@
 - ✅ 注释章节智能提取 - 基于LLM的标题+内容+表格提取
 - 🚀 批量处理优化 - 性能提升2.2倍，成本降低80%
 
-**当前版本**: v1.4.0
+**当前版本**: v1.5.0
 
 ## 🚀 快速开始
 
@@ -186,6 +186,24 @@ with open('output/notes_result.json', 'w', encoding='utf-8') as f:
 - [性能测试报告](docs/batch_extraction_report.md)
 - [工作总结](docs/BATCH_EXTRACTION_SUMMARY.md)
 
+#### 导出注释到Excel（新功能）
+
+```bash
+# 将提取的注释导出为格式化的Excel文件
+python tools/export_notes_to_excel.py \
+    output/notes_full.json \
+    -c 福耀玻璃 \
+    -o output/福耀玻璃_财务报表注释.xlsx
+```
+
+**Excel文件结构**：
+- Sheet 1：目录（一级标题列表，包含页码、子项数量、表格数量）
+- Sheet 2-N：各一级标题的详细内容（标题+文本+表格）
+- 完整的格式化样式（颜色、字体、边框、对齐）
+- 自动筛选、冻结窗格、斑马纹
+
+**详细文档**: [注释Excel导出指南](docs/notes_excel_export_guide.md)
+
 ### 3. 批量导出（推荐）
 
 ```bash
@@ -220,16 +238,20 @@ python tools/export_income_statement.py
 
 ## 📚 文档导航
 
-### 核心文档
-- **[环境配置](docs/SETUP.md)** - 环境配置指南（虚拟环境、依赖安装、LLM配置）
-- **[功能说明](docs/FEATURES.md)** - 详细功能介绍和使用方法
-- **[开发进展](docs/DEVELOPMENT.md)** - 当前状态、已知问题、路线图
+### 核心文档（精简版 - 仅4个）
+- **[环境配置](docs/SETUP.md)** - 环境配置、依赖安装、LLM配置
+- **[功能说明](docs/FEATURES.md)** - 完整功能介绍（含批量提取、Excel导出）
 - **[技术架构](docs/ARCHITECTURE.md)** - 系统架构和核心技术
+- **[开发进展](docs/DEVELOPMENT.md)** - 开发状态、性能数据、版本历史
 
-### 批量提取文档（新）
-- **[批量提取使用指南](docs/full_extraction_guide.md)** - 完整的使用说明和最佳实践
-- **[性能测试报告](docs/batch_extraction_report.md)** - 详细的性能测试数据
-- **[工作总结](docs/BATCH_EXTRACTION_SUMMARY.md)** - 批量提取优化工作总结
+### 使用Git查看历史
+```bash
+# 查看版本历史
+git log --oneline
+
+# 查看特定版本更新
+git show v1.5.0
+```
 
 历史文档归档在 `docs/archive/` 目录
 
@@ -315,9 +337,26 @@ A: 使用 `scripts/extract_full_notes.py` 脚本，自动分批处理，支持�
 
 ---
 
-**最后更新**: 2026-02-06 | **版本**: v1.4.0
+**最后更新**: 2026-02-10 | **版本**: v1.5.0
 
-## 🎉 最新更新 (v1.4.0)
+## 🎉 最新更新 (v1.5.0)
+
+### 注释Excel导出功能
+- ✅ 实现财务报表注释Excel导出工具
+- ✅ 目录sheet：一级标题概览，包含统计信息
+- ✅ 内容sheet：每个一级标题独立sheet，包含子项和表格
+- ✅ 完整格式化：颜色方案、字体样式、边框、对齐
+- ✅ 用户友好：冻结窗格、自动筛选、斑马纹
+- ✅ 完整文档：使用指南和故障排除
+
+**使用示例**:
+```bash
+python tools/export_notes_to_excel.py output/notes_full.json -c 福耀玻璃
+```
+
+详见: [注释Excel导出指南](docs/notes_excel_export_guide.md)
+
+## 🎉 v1.4.0 更新
 
 ### 批量提取优化
 - ✅ 实现批量处理方法，性能提升2.2倍
