@@ -2,7 +2,7 @@
 
 > 基于AI的PDF财务报表智能解析系统，专注于A股上市公司年报数据提取
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -26,8 +26,6 @@
 - ✅ 注释章节智能提取 - 基于LLM的标题+内容+表格提取
 - 🚀 批量处理优化 - 性能提升2.2倍，成本降低80%
 
-**当前版本**: v1.5.0
-
 ## 🚀 快速开始
 
 ### 1. 环境配置
@@ -48,9 +46,11 @@ pip install -r requirements.txt
 
 **⚠️ 重要**: 本项目使用虚拟环境，所有命令都需要在激活虚拟环境后执行。
 
+详细配置说明请参考 [环境配置文档](docs/SETUP.md)。
+
 ### 2. 基本使用
 
-#### 解析资产负债表
+#### 解析三大财务报表
 
 ```python
 from src.pdf_reader import PDFReader
@@ -72,67 +72,21 @@ with PDFReader('path/to/annual_report.pdf') as pdf_reader:
     result = parser.parse_balance_sheet(merged_data)
 ```
 
-#### 解析利润表
+支持的解析器：
+- `BalanceSheetParser()` - 资产负债表
+- `IncomeStatementParser()` - 利润表
+- `CashFlowParser()` - 现金流量表
 
-```python
-from src.pdf_reader import PDFReader
-from src.table_extractor import TableExtractor
-from src.parsers.income_statement import IncomeStatementParser
-
-# 读取PDF并提取表格
-with PDFReader('path/to/annual_report.pdf') as pdf_reader:
-    table_extractor = TableExtractor()
-    pages = pdf_reader.get_pages((93, 95))
-    tables = table_extractor.extract_tables_from_pages(pages)
-
-    # 解析利润表
-    parser = IncomeStatementParser()
-    merged_data = []
-    for table_dict in tables:
-        merged_data.extend(table_dict['data'])
-
-    result = parser.parse_income_statement(merged_data)
-```
-
-#### 解析现金流量表
-
-```python
-from src.pdf_reader import PDFReader
-from src.table_extractor import TableExtractor
-from src.parsers.cash_flow import CashFlowParser
-
-# 读取PDF并提取表格
-with PDFReader('path/to/annual_report.pdf') as pdf_reader:
-    table_extractor = TableExtractor()
-    pages = pdf_reader.get_pages((96, 97))
-    tables = table_extractor.extract_tables_from_pages(pages)
-
-    # 解析现金流量表
-    parser = CashFlowParser()
-    merged_data = []
-    for table_dict in tables:
-        merged_data.extend(table_dict['data'])
-
-    result = parser.parse_cash_flow(merged_data)
-```
-
-#### 提取财务报表注释（批量处理 - 推荐）
-
-**方法1: 使用命令行脚本（最简单）**
+#### 提取财务报表注释（批量处理）
 
 ```bash
 # 激活虚拟环境
 source venv/bin/activate
 
-# 提取福耀玻璃年报注释（125-174页）
+# 提取年报注释（批量处理，性能提升2.2倍）
 python scripts/extract_full_notes.py \
     data/福耀玻璃2024年年度报告.pdf \
     125 174
-
-# 提取深信服年报注释（162-199页）
-python scripts/extract_full_notes.py \
-    data/深信服2024年年度报告.pdf \
-    162 199
 
 # 自定义输出路径
 python scripts/extract_full_notes.py \
@@ -146,65 +100,7 @@ python scripts/extract_full_notes.py \
 - ✅ 成功率100%
 - 📊 完整提取标题、文本和表格
 
-**方法2: 使用Python API**
-
-```python
-from src.parsers.batch_notes_extractor import BatchNotesExtractor
-from src.parsers.config_loader import load_llm_config
-
-# 加载配置
-config = load_llm_config()
-
-# 创建批量提取器
-extractor = BatchNotesExtractor(
-    provider=config['provider'],
-    model=config['model'],
-    api_key=config.get('api_key'),
-    base_url=config.get('base_url')
-)
-
-# 批量提取（5页/批次，自动优化）
-result = extractor.extract_notes_batch(
-    pdf_path='data/福耀玻璃2024年年度报告.pdf',
-    start_page=125,
-    end_page=174,
-    batch_size=5  # 推荐配置
-)
-
-# 查看结果
-print(f"提取的注释数量: {result['total_notes']}")
-print(f"包含表格的注释: {sum(1 for n in result['notes'] if n.get('has_table'))}")
-
-# 保存结果
-import json
-with open('output/notes_result.json', 'w', encoding='utf-8') as f:
-    json.dump(result, f, ensure_ascii=False, indent=2)
-```
-
-**详细文档**:
-- [批量提取使用指南](docs/full_extraction_guide.md)
-- [性能测试报告](docs/batch_extraction_report.md)
-- [工作总结](docs/BATCH_EXTRACTION_SUMMARY.md)
-
-#### 导出注释到Excel（新功能）
-
-```bash
-# 将提取的注释导出为格式化的Excel文件
-python tools/export_notes_to_excel.py \
-    output/notes_full.json \
-    -c 福耀玻璃 \
-    -o output/福耀玻璃_财务报表注释.xlsx
-```
-
-**Excel文件结构**：
-- Sheet 1：目录（一级标题列表，包含页码、子项数量、表格数量）
-- Sheet 2-N：各一级标题的详细内容（标题+文本+表格）
-- 完整的格式化样式（颜色、字体、边框、对齐）
-- 自动筛选、冻结窗格、斑马纹
-
-**详细文档**: [注释Excel导出指南](docs/notes_excel_export_guide.md)
-
-### 3. 批量导出（推荐）
+#### 导出Excel报表
 
 ```bash
 # 激活虚拟环境
@@ -212,39 +108,57 @@ source venv/bin/activate
 
 # 一次性导出所有公司的三张报表
 python tools/export_all_statements.py
+
+# 将提取的注释导出为Excel文件
+python tools/export_notes_to_excel.py \
+    output/notes_full.json \
+    -c 福耀玻璃 \
+    -o output/福耀玻璃_财务报表注释.xlsx
 ```
 
-**输出**：
-- 每个公司生成一个Excel文件
+**Excel文件特性**：
 - 包含3个工作表：资产负债表、利润表、现金流量表
-- 使用标准中文财务科目名称（货币资金、营业收入、经营活动现金流量净额等）
-- 文件保存在 `output/` 目录
-- 文件命名：`{公司名}_三表合一_{时间戳}.xlsx`
+- 使用标准中文财务科目名称
+- 完整的格式化样式（颜色、字体、边框）
+- 自动筛选、冻结窗格、斑马纹
 
-### 4. 单独导出
+### 3. Python API
 
-如果只需要导出特定报表：
+```python
+from src.parsers.batch_notes_extractor import BatchNotesExtractor
+from src.parsers.config_loader import ConfigLoader
 
-```bash
-# 激活虚拟环境
-source venv/bin/activate
+# 加载配置
+config_loader = ConfigLoader()
+config = config_loader.load_config()
+llm_config = config['llm_api']
 
-# 导出资产负债表数据
-python tools/export_to_excel.py
+# 创建批量提取器
+extractor = BatchNotesExtractor(llm_config, batch_size=5)
 
-# 导出利润表数据
-python tools/export_income_statement.py
+# 批量提取（5页/批次，推荐配置）
+with PDFReader('data/report.pdf') as pdf_reader:
+    pages = pdf_reader.get_pages((125, 174))
+    result = extractor.extract_notes_from_pages_batch(
+        pages,
+        start_page_num=125
+    )
+
+# 查看结果
+print(f"提取的注释数量: {result['total_notes']}")
+print(f"包含表格的注释: {sum(1 for n in result['notes'] if n.get('has_table'))}")
 ```
 
 ## 📚 文档导航
 
-### 核心文档（精简版 - 仅4个）
+### 核心文档
 - **[环境配置](docs/SETUP.md)** - 环境配置、依赖安装、LLM配置
-- **[功能说明](docs/FEATURES.md)** - 完整功能介绍（含批量提取、Excel导出）
+- **[功能说明](docs/FEATURES.md)** - 完整功能介绍、使用指南、性能数据
 - **[技术架构](docs/ARCHITECTURE.md)** - 系统架构和核心技术
-- **[开发进展](docs/DEVELOPMENT.md)** - 开发状态、性能数据、版本历史
+- **[开发进展](docs/DEVELOPMENT.md)** - 开发状态、版本历史、性能指标
 
-### 使用Git查看历史
+### 查看历史版本
+
 ```bash
 # 查看版本历史
 git log --oneline
@@ -253,7 +167,7 @@ git log --oneline
 git show v1.5.0
 ```
 
-历史文档归档在 `docs/archive/` 目录
+历史文档归档在 `docs/archive/` 目录。
 
 ## 📁 项目结构
 
@@ -270,14 +184,12 @@ pdf_context_extractor_agent/
 │       ├── balance_sheet.py           # 资产负债表解析器
 │       ├── income_statement.py        # 利润表解析器
 │       ├── cash_flow.py               # 现金流量表解析器
-│       ├── notes_extractor.py         # 注释提取器
-│       ├── batch_notes_extractor.py   # 批量注释提取器（新）
-│       ├── column_analyzer.py
-│       ├── hybrid_column_analyzer.py  # 混合识别
+│       ├── batch_notes_extractor.py   # 批量注释提取器
+│       ├── column_analyzer.py         # 动态列识别
 │       └── llm_client.py              # LLM客户端
 │
 ├── scripts/                 # 脚本工具
-│   └── extract_full_notes.py          # 完整文档注释提取脚本（新）
+│   └── extract_full_notes.py          # 注释提取脚本
 │
 ├── tests/                   # 测试文件
 ├── tools/                   # 工具脚本
@@ -298,20 +210,13 @@ python tests/test_column_analyzer.py
 # 集成测试
 python tests/test_integration.py
 
-# 真实PDF测试 - 资产负债表
-python tests/test_real_pdf.py
-
-# 真实PDF测试 - 利润表
-python tests/test_income_statement.py
-
-# 真实PDF测试 - 现金流量表
-python tests/test_cash_flow.py
-
-# LLM集成测试
-python tests/test_llm_integration.py
+# 真实PDF测试
+python tests/test_real_pdf.py              # 资产负债表
+python tests/test_income_statement.py      # 利润表
+python tests/test_cash_flow.py             # 现金流量表
 
 # 批量注释提取测试
-python tests/test_batch_notes_extractor.py
+python tests/test_batch_extractor.py
 ```
 
 ## 💡 常见问题
@@ -320,16 +225,19 @@ python tests/test_batch_notes_extractor.py
 A: 虚拟环境可以隔离项目依赖，避免与系统Python包冲突。本项目所有命令都需要在虚拟环境中执行。
 
 ### Q: 如何启用LLM功能？
-A: 参考 [LLM配置指南](docs/guides/llm_config.md) 进行配置。
+A: 参考 [环境配置文档](docs/SETUP.md) 的LLM配置章节进行配置。
 
 ### Q: 测试数据在哪里？
 A: 测试PDF文件位于 `tests/sample_pdfs/` 目录。
 
 ### Q: 批量提取和逐页提取有什么区别？
-A: 批量提取将多页合并处理，性能提升2.2倍，成本降低80%。推荐使用批量提取（5页/批次）。详见[性能测试报告](docs/batch_extraction_report.md)。
+A: 批量提取将多页合并处理，性能提升2.2倍，成本降低80%。推荐使用批量提取（5页/批次）。详见 [功能说明文档](docs/FEATURES.md)。
 
 ### Q: 如何处理大文档（50+页）？
-A: 使用 `scripts/extract_full_notes.py` 脚本，自动分批处理，支持断点续传。详见[使用指南](docs/full_extraction_guide.md)。
+A: 使用 `scripts/extract_full_notes.py` 脚本，自动分批处理。详见 [功能说明文档](docs/FEATURES.md)。
+
+### Q: 支持哪些表头格式？
+A: 支持期末/期初、本期末/上期末、年末/年初、日期格式等多种表头格式。系统会自动识别并处理。详见 [功能说明文档](docs/FEATURES.md)。
 
 ## 📧 联系方式
 
@@ -337,39 +245,5 @@ A: 使用 `scripts/extract_full_notes.py` 脚本，自动分批处理，支持�
 
 ---
 
-**最后更新**: 2026-02-10 | **版本**: v1.5.0
-
-## 🎉 最新更新 (v1.5.0)
-
-### 注释Excel导出功能
-- ✅ 实现财务报表注释Excel导出工具
-- ✅ 目录sheet：一级标题概览，包含统计信息
-- ✅ 内容sheet：每个一级标题独立sheet，包含子项和表格
-- ✅ 完整格式化：颜色方案、字体样式、边框、对齐
-- ✅ 用户友好：冻结窗格、自动筛选、斑马纹
-- ✅ 完整文档：使用指南和故障排除
-
-**使用示例**:
-```bash
-python tools/export_notes_to_excel.py output/notes_full.json -c 福耀玻璃
-```
-
-详见: [注释Excel导出指南](docs/notes_excel_export_guide.md)
-
-## 🎉 v1.4.0 更新
-
-### 批量提取优化
-- ✅ 实现批量处理方法，性能提升2.2倍
-- ✅ LLM调用减少80%，大幅降低成本
-- ✅ 完整提取标题、文本和表格内容
-- ✅ 提供命令行脚本，开箱即用
-- ✅ 完整的文档和测试
-
-**性能对比**:
-| 方法 | 速度 | LLM调用(50页) | 成本 |
-|------|------|---------------|------|
-| 逐页处理 | 60秒/页 | 50次 | ¥0.50 |
-| **批量处理** | **27.6秒/页** | **10次** | **¥0.10** |
-| **提升** | **2.2x** | **5x** | **80%↓** |
-
-详见: [批量提取工作总结](docs/BATCH_EXTRACTION_SUMMARY.md)
+**当前版本**: v1.5.0
+**最后更新**: 2026-02-10

@@ -246,12 +246,10 @@ source venv/bin/activate
 # 检查环境变量
 echo $LLM_API_KEY
 
-# 运行配置测试
-python tests/test_llm_config.py
+# 运行测试验证配置
+python tests/test_batch_extractor.py
 
-# 应该看到:
-# ✓ 配置文件加载成功
-# ✓ API Key 已设置
+# 如果配置正确，应该能成功运行
 ```
 
 ---
@@ -293,21 +291,25 @@ flake8 src/
 # 激活虚拟环境
 source venv/bin/activate
 
-# 运行所有测试
-python tests/test_column_analyzer.py
-python tests/test_integration.py
-python tests/test_real_pdf.py
+# 运行核心测试
+python tests/test_column_analyzer.py     # 列分析器单元测试
+python tests/test_integration.py         # 集成测试
+python tests/test_real_pdf.py            # 资产负债表测试
+python tests/test_income_statement.py    # 利润表测试
+python tests/test_cash_flow.py           # 现金流量表测试
 
-# 如果配置了LLM
-python tests/test_llm_integration.py
+# 批量提取测试（需要LLM配置）
+python tests/test_batch_extractor.py
+python tests/test_full_extraction.py
 ```
 
 ### 6.2 预期结果
 
 ```
-✓ 单元测试: 7/7 通过
-✓ 集成测试: 3/3 通过
-✓ 真实PDF测试: 4/4 通过
+✓ 核心测试: 7个测试文件全部通过
+✓ 资产负债表: 5/5 公司测试通过
+✓ 利润表: 4/4 公司测试通过
+✓ 现金流量表: 4/5 公司测试通过
 ```
 
 ---
@@ -452,9 +454,10 @@ rm -rf logs/*.log
 环境配置完成后，您可以：
 
 1. 阅读 [功能说明](FEATURES.md) 了解详细功能
-2. 查看 [快速开始指南](guides/quick_start.md) 开始使用
+2. 查看 [技术架构](ARCHITECTURE.md) 了解系统设计
 3. 查看 [开发进展](DEVELOPMENT.md) 了解项目状态
+4. 返回 [README.md](../README.md) 查看快速开始
 
 ---
 
-**最后更新**: 2026-02-05
+**最后更新**: 2026-02-10

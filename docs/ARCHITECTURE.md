@@ -575,4 +575,5 @@ with ThreadPoolExecutor(max_workers=4) as executor:
 
 ---
 
-**最后更新**: 2026-02-05
+**当前版本**: v1.5.0
+**最后更新**: 2026-02-10
